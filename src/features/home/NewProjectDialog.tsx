@@ -34,6 +34,7 @@ export function NewProjectDialog() {
   const [draft, setDraft] = useState<Draft>(readDraft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const activeModelAvailable = Boolean(resolveActiveModel());
 
   useEffect(() => {
     try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* Draft remains in component state. */ }
@@ -103,9 +104,9 @@ export function NewProjectDialog() {
       <label className="block space-y-2 text-sm"><span>وصف المشروع</span><textarea value={draft.description} onChange={event => updateDraft({ description: event.target.value })} className="textarea-field" placeholder="اكتب الوظائف المطلوبة بالتفصيل..." rows={4}/></label>
       <fieldset className="space-y-2"><legend className="text-sm">نوع المشروع</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{choices.map(({ id: type, label, Icon }) => <button type="button" key={type} aria-pressed={draft.type === type} onClick={() => updateDraft({ type })} className={`flex min-h-12 items-center gap-2 rounded-xl border p-3 text-sm transition-colors ${draft.type === type ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-accent'}`}><Icon size={18}/>{label}</button>)}</div></fieldset>
       {!providers.length && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600">لم تضف مزود ذكاء اصطناعي بعد. سيتم إنشاء مساحة عمل محلية فقط؛ أضف مزودًا وموديلًا من الإعدادات لتفعيل التوليد.</p>}
-      {providers.length > 0 && !resolveActiveModel() && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600">المزود موجود لكن لا يوجد موديل محدد. اختر موديلًا من الإعدادات قبل إنشاء مشروع مولّد.</p>}
+      {providers.length > 0 && !activeModelAvailable && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600">لا يوجد مزود وموديل جاهز حاليًا. تأكد من حفظ مفتاح API واختيار موديل صالح من الإعدادات. يمكنك إنشاء مساحة عمل محلية الآن وبدء التحليل لاحقًا.</p>}
       {error && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="w-full" disabled={!draft.name.trim() || busy} loading={busy}>إنشاء المشروع وبدء التحليل</Button>
+      <Button type="submit" className="w-full" disabled={!draft.name.trim() || busy} loading={busy}{activeModelAvailable ? 'إنشاء المشروع وبدء التحليل' : 'إنشاء مساحة العمل'}</Button>
     </form>
   </section>;
 }
