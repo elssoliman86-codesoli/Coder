@@ -8,7 +8,7 @@ import { cn } from '@lib/utils';
 export function Layout() {
   const location = useLocation();
   const { sidebarOpen, setSidebarOpen } = useStore();
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', settings.language === 'ar' ? 'rtl' : 'ltr');
