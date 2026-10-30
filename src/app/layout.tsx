@@ -30,7 +30,7 @@ export function Layout() {
       <div className={cn('flex-1 flex flex-col min-w-0', 'lg:pr-64')}>
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className={cn('flex-1 overflow-auto p-4 md:p-6 lg:p-8', isWorkspace ? 'pt-16' : 'pt-20')}>
+        <main className={cn('flex-1 overflow-auto p-4 md:p-6 lg:p-8', isWorkspace ? 'pt-[calc(4rem+env(safe-area-inset-top))]' : 'pt-[calc(5rem+env(safe-area-inset-top))]')}>
           <Outlet />
         </main>
       </div>
