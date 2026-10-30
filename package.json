@@ -1,11 +1,12 @@
 {
-  "name": "2onebyte-coder",
-  "version": "0.1.0",
+  "name": "coder",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:web": "vite build --outDir out",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
@@ -15,7 +16,8 @@
     "cap:add": "cap add android",
     "cap:sync": "cap sync android",
     "cap:open": "cap open android",
-    "cap:build": "cd android && ./gradlew assembleRelease",
+    "cap:build": "npm run build:web && cd android && ./gradlew assembleRelease",
+    "cap:build:debug": "npm run build:web && cd android && ./gradlew assembleDebug",
     "db:generate": "dexie-export-schema"
   },
   "dependencies": {
