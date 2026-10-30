@@ -17,6 +17,7 @@ export function Settings() {
   const providers = useProviders();
   const updateSettings = useStore(s => s.updateSettings);
   const addProvider = useStore(s => s.addProvider);
+  const updateProvider = useStore(s => s.updateProvider);
   const deleteProvider = useStore(s => s.deleteProvider);
   const setModels = useStore(s => s.setModels);
   const [providerType, setProviderType] = useState('openai');
@@ -24,6 +25,7 @@ export function Settings() {
   const [baseUrl, setBaseUrl] = useState(presets[0].baseUrl);
   const [apiKey, setApiKey] = useState('');
   const [modelName, setModelName] = useState('');
+  const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
@@ -47,7 +49,7 @@ export function Settings() {
       const root = provider.baseUrl.replace(/\/+$/, '');
       const isOllama = provider.provider === 'ollama' || /:\d+$/i.test(root) && root.includes('11434');
       const response = await fetch(isOllama ? root + '/api/tags' : root + '/models', {
-        headers: provider.apiKey ? { Authorization: 'Bearer ' + provider.apiKey } : {}
+        headers: (apiKeyDrafts[provider.id] ?? provider.apiKey) ? { Authorization: 'Bearer ' + (apiKeyDrafts[provider.id] ?? provider.apiKey) } : {}
       });
       if (!response.ok) throw new Error('HTTP ' + response.status + ' — تحقق من الرابط ومفتاح API وإعدادات CORS.');
       const data = await response.json();
@@ -64,6 +66,10 @@ export function Settings() {
     } catch (error) {
       setNotice('تعذر تحميل الموديلات: ' + (error instanceof Error ? error.message : 'خطأ غير معروف'));
     } finally { setBusyId(null); }
+  };
+
+  const setDefaultProvider = (providerId: string) => {
+    providers.forEach(provider => updateProvider(provider.id, { default: provider.id === providerId }));
   };
 
   const addManualModel = (provider: Provider) => {
@@ -96,7 +102,8 @@ export function Settings() {
       {notice && <p role="status" className="rounded-lg border border-border bg-background p-3 text-sm">{notice}</p>}
       {providers.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground"><Server className="mx-auto mb-2" size={24}/>لم تتم إضافة أي مزود بعد.</div> :
         <div className="space-y-4">{providers.map(provider=><div key={provider.id} className="space-y-3 rounded-xl border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2 font-semibold"><Server size={16}/>{provider.name}{provider.default && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">افتراضي</span>}</div><p className="mt-1 break-all text-xs text-muted-foreground" dir="ltr">{provider.baseUrl}</p></div><Button variant="ghost" size="icon" onClick={()=>deleteProvider(provider.id)} aria-label="حذف المزود"><Trash2 size={16}/></Button></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2 font-semibold"><Server size={16}/>{provider.name}{provider.default && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">افتراضي</span>}</div><p className="mt-1 break-all text-xs text-muted-foreground" dir="ltr">{provider.baseUrl}</p></div><div className="flex items-center gap-1"><Button variant="outline" size="sm" onClick={()=>setDefaultProvider(provider.id)} disabled={provider.default}>{provider.default ? 'المزود الافتراضي' : 'جعله افتراضياً'}</Button><Button variant="ghost" size="icon" onClick={()=>deleteProvider(provider.id)} aria-label="حذف المزود"><Trash2 size={16}/></Button></div></div>
+          <label className="block space-y-1 text-xs"><span className="flex items-center gap-1"><KeyRound size={13}/> مفتاح API لهذا المزود (يُحفظ مؤقتاً في الجلسة)</span><input className="input-field" type="password" autoComplete="off" value={apiKeyDrafts[provider.id] ?? provider.apiKey ?? ''} onChange={e=>{setApiKeyDrafts(current=>({...current,[provider.id]:e.target.value}));updateProvider(provider.id,{apiKey:e.target.value});}} placeholder="أعد إدخال المفتاح بعد إعادة التشغيل" dir="ltr"/></label>
           <div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" disabled={busyId===provider.id} onClick={()=>discoverModels(provider)}><RefreshCw size={14} className={busyId===provider.id?'animate-spin':''}/> {busyId===provider.id?'جارٍ التحميل':'جلب الموديلات'}</Button><span className="text-xs text-muted-foreground">{provider.models?.length ?? 0} موديل</span></div>
           <div className="flex flex-col gap-2 sm:flex-row"><input className="input-field" value={modelName} onChange={e=>setModelName(e.target.value)} placeholder="اسم موديل لإضافته يدوياً" dir="ltr"/><Button variant="secondary" onClick={()=>addManualModel(provider)} disabled={!modelName.trim()}><Plus size={15}/> إضافة موديل</Button></div>
           {(provider.models ?? []).length > 0 && <div className="divide-y divide-border rounded-lg border border-border">{provider.models.map(model=><div key={model.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium" dir="ltr">{model.name}</p><p className="text-xs text-muted-foreground">{model.status==='ok'?'متاح':model.status==='error'?'به خطأ':'لم يتم اختباره'}</p></div><Cpu size={16} className="shrink-0 text-muted-foreground"/></div>)}</div>}
