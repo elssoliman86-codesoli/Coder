@@ -60,13 +60,13 @@ jobs:
 
       - name: Set output
         id: set-output
-        run: echo "webDir=out" >> $GITHUB_OUTPUT
+        run: echo "webDir=dist" >> $GITHUB_OUTPUT
 
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: out/
+          path: dist/
           retention-days: 7
 
   build-android:
@@ -85,7 +85,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-build
-          path: out/
+          path: dist/
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -200,7 +200,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-build
-          path: out/
+          path: dist/
 
       - name: Setup Java
         uses: actions/setup-java@v4
