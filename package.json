@@ -16,7 +16,8 @@
     "cap:sync": "cap sync android",
     "cap:open": "cap open android",
     "cap:build": "cd android && ./gradlew assembleRelease",
-    "db:generate": "dexie-export-schema"
+    "db:generate": "dexie-export-schema",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.0",
