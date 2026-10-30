@@ -48,10 +48,10 @@ export function Settings() {
     setBusyId(provider.id);
     setNotice('');
     try {
-      const root = provider.baseUrl.trim().replace(/\\/+$/, '');
+      const root = provider.baseUrl.trim().replace(/\/+$/, '');
       if (!root) throw new Error('أدخل Base URL صحيحاً للمزود.');
 
-      const isOllama = provider.provider === 'ollama' || /:11434(?:$|\\/)/i.test(root);
+      const isOllama = provider.provider === 'ollama' || /:11434(?:$|\/)/i.test(root);
       const endpoints = isOllama
         ? [root + '/api/tags']
         : root.endsWith('/v1')
