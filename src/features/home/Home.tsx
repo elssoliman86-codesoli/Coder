@@ -1,10 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { nanoid } from 'nanoid';
 import { Plus, FolderOpen, Code2, Smartphone, Globe, Terminal, Trash2 } from 'lucide-react';
 import { Card } from '@components/ui/card';
 import { Button } from '@components/ui/button';
 import { useStore } from '@app/store';
-import type { Project } from '@app/types';
 
 const types: {id:Project['type'];label:string;Icon:typeof Globe}[] = [
   {id:'website',label:'موقع ويب',Icon:Globe},
@@ -16,14 +14,8 @@ const types: {id:Project['type'];label:string;Icon:typeof Globe}[] = [
 export function Home() {
   const navigate = useNavigate();
   const projects = useStore(s=>s.projects);
-  const addProject = useStore(s=>s.addProject);
   const deleteProject = useStore(s=>s.deleteProject);
-  const createProject = () => {
-    const now=Date.now();
-    const project:Project={id:nanoid(),name:'مشروع جديد',description:'',type:'website',primaryLanguage:'typescript',languages:['typescript'],files:[],createdAt:now,updatedAt:now};
-    addProject(project);
-    navigate('/new-project');
-  };
+  const createProject = () => navigate('/new-project');
   const list=Object.values(projects).sort((a,b)=>b.updatedAt-a.updatedAt);
   return <section className="mx-auto max-w-7xl space-y-8">
     <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="mb-2 text-sm text-primary">مساحة التطوير الذكية</p><h1 className="text-3xl font-bold">مشاريعك</h1><p className="mt-2 text-sm text-muted-foreground">أنشئ مشاريعك ونظّم ملفاتك من مكان واحد.</p></div><Button onClick={createProject}><Plus size={18}/> مشروع جديد</Button></div>
