@@ -10,7 +10,6 @@ export function Header({ onMenuClick, showMenu = true }: HeaderProps) {
   const navigate = useNavigate();
   const settings = useSettings();
   const updateSettings = useStore(s => s.updateSettings);
-  const { sidebarOpen, setSidebarOpen } = useStore();
   const toggleTheme = () => updateSettings({theme:settings.theme==='dark'?'light':'dark'});
   const toggleLanguage = () => updateSettings({language:settings.language==='ar'?'en':'ar'});
 
@@ -26,7 +25,6 @@ export function Header({ onMenuClick, showMenu = true }: HeaderProps) {
           <Button variant="ghost" size="sm" onClick={toggleLanguage}>{settings.language==='ar'?'EN':'ع'}</Button>
           <Button variant="ghost" size="icon" onClick={()=>navigate('/settings')} aria-label="الإعدادات"><Settings className="h-5 w-5"/></Button>
           <Button variant="primary" size="sm" onClick={()=>navigate('/new-project')} className="hidden gap-2 sm:flex"><FilePlus className="h-4 w-4"/><span>مشروع جديد</span></Button>
-          <button className="hidden" onClick={()=>setSidebarOpen(!sidebarOpen)} aria-hidden="true" tabIndex={-1}/>
         </div>
       </div></div>
     </header>
