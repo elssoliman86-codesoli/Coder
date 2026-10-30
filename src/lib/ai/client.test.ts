@@ -1,7 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '@app/store';
 import { resolveActiveModel } from './client';
 import type { Model, Provider } from '@app/types';
+
+vi.mock('@app/store', () => ({
+  useStore: { getState: vi.fn(() => ({ providers: [] })) }
+}));
+
+function setProviders(providers: Provider[]) {
+  vi.mocked(useStore.getState).mockReturnValue({
+    providers
+  } as ReturnType<typeof useStore.getState>);
+}
 
 function makeModel(providerId: string, id = 'test-model'): Model {
   return {
@@ -30,7 +40,8 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
 }
 
 afterEach(() => {
-  useStore.setState({ providers: [] });
+  vi.mocked(useStore.getState).mockReset();
+  vi.mocked(useStore.getState).mockReturnValue({ providers: [] } as ReturnType<typeof useStore.getState>);
 });
 
 describe('resolveActiveModel', () => {
@@ -41,7 +52,7 @@ describe('resolveActiveModel', () => {
   it('skips a default provider without credentials and uses the next ready provider', () => {
     const unavailable = makeProvider({ id: 'missing-key', apiKey: '', default: true });
     const ready = makeProvider({ id: 'ready', default: false });
-    useStore.setState({ providers: [unavailable, ready] });
+    setProviders([unavailable, ready]);
 
     expect(resolveActiveModel()).toEqual({
       provider: ready,
@@ -51,7 +62,7 @@ describe('resolveActiveModel', () => {
 
   it('allows Ollama providers without an API key', () => {
     const ollama = makeProvider({ id: 'local', provider: 'ollama', apiKey: '' });
-    useStore.setState({ providers: [ollama] });
+    setProviders([ollama]);
 
     expect(resolveActiveModel()).toEqual({
       provider: ollama,
@@ -69,7 +80,7 @@ describe('resolveActiveModel', () => {
       selectedModelId: 'selected'
     });
     const secondary = makeProvider({ id: 'secondary' });
-    useStore.setState({ providers: [secondary, preferred] });
+    setProviders([secondary, preferred]);
 
     expect(resolveActiveModel()).toEqual({ provider: preferred, model: selected });
   });
@@ -79,7 +90,7 @@ describe('resolveActiveModel', () => {
       id: 'provider-1',
       models: [makeModel('some-other-provider')]
     });
-    useStore.setState({ providers: [provider] });
+    setProviders([provider]);
 
     expect(resolveActiveModel()).toBeNull();
   });
