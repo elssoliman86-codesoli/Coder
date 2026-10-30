@@ -1,9 +1,9 @@
 {
   "appId": "com.onebyte.coder",
   "appName": "Coder",
-  "webDir": "out",
+  "webDir": "dist",
   "server": {
-    "url": "http://10.0.2.2:3000",
+    "url": "http://10.0.2.2:5173",
     "cleartext": true
   },
   "android": {
