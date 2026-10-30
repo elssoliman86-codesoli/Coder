@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsStore } from '@app/store/settingsStore';
-import { SettingsSection } from '@components/settings/SettingsSection';
-import { SettingItem } from '@components/settings/SettingItem';
-import { SettingsTabs } from '@components/settings/SettingsTabs';
+import { useStore } from '@app/store';
+import { Badge } from '@components/ui/badge';
+import { Button } from '@components/ui/button';
+import { cn } from '@lib/utils';
+import { ChevronDown, ChevronUp, Save, RotateCcw, Loader2, Check } from 'lucide-react';
 
 const SETTINGS_TABS = [
   { id: 'general', label: 'settings.tabs.general', icon: 'settings' },
@@ -15,33 +16,273 @@ const SETTINGS_TABS = [
 
 type SettingsTabId = typeof SETTINGS_TABS[number]['id'];
 
+interface SettingItemProps {
+  key: string;
+  type: 'text' | 'password' | 'number' | 'select' | 'switch' | 'slider' | 'textarea' | 'color';
+  label: string;
+  description?: string;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  options?: { value: string; label: string }[];
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+}
+
+const SettingItem = ({ key, type, label, description, value, onChange, options, min, max, step, placeholder }: SettingItemProps) => {
+  const id = `setting-${key}`;
+  
+  const renderInput = () => {
+    switch (type) {
+      case 'text':
+      case 'password':
+        return (
+          <input
+            id={id}
+            type={type}
+            value={value as string}
+            onChange={e => onChange(e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+          />
+        );
+      case 'number':
+        return (
+          <input
+            id={id}
+            type="number"
+            value={value as number}
+            onChange={e => onChange(Number(e.target.value))}
+            min={min}
+            max={max}
+            step={step}
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+          />
+        );
+      case 'select':
+        return (
+          <select
+            id={id}
+            value={value as string}
+            onChange={e => onChange(e.target.value)}
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+          >
+            {options?.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        );
+      case 'switch':
+        return (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              id={id}
+              type="checkbox"
+              checked={value as boolean}
+              onChange={e => onChange(e.target.checked)}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <span className="text-sm font-medium">{value ? 'مفعل' : 'معطل'}</span>
+          </label>
+        );
+      case 'slider':
+        return (
+          <div className="flex items-center gap-3">
+            <input
+              id={id}
+              type="range"
+              value={value as number}
+              onChange={e => onChange(Number(e.target.value))}
+              min={min}
+              max={max}
+              step={step}
+              className="flex-1 h-2 bg-muted rounded-lg appearance-none accent-primary"
+            />
+            <span className="text-sm font-mono text-muted-foreground min-w-[40px] text-center">
+              {value}
+            </span>
+          </div>
+        );
+      case 'textarea':
+        return (
+          <textarea
+            id={id}
+            value={value as string}
+            onChange={e => onChange(e.target.value)}
+            placeholder={placeholder}
+            rows={4}
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-y"
+          />
+        );
+      case 'color':
+        return (
+          <input
+            id={id}
+            type="color"
+            value={value as string}
+            onChange={e => onChange(e.target.value)}
+            className="w-10 h-10 rounded border border-border cursor-pointer"
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div key={key} className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-foreground">
+        {label}
+      </label>
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
+      {renderInput()}
+    </div>
+  );
+};
+
+const SettingsSection = ({ 
+  title, 
+  description, 
+  children, 
+  isSaving, 
+  hasChanges,
+  onSave,
+  onReset 
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  isSaving: boolean;
+  hasChanges: boolean;
+  onSave: () => void;
+  onReset: () => void;
+}) => {
+  return (
+    <div className="space-y-4 p-4 bg-card border border-border rounded-lg">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+          {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {hasChanges && (
+            <Badge variant="warning" className="text-xs">
+              تغييرات غير محفوظة
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onReset}
+            disabled={isSaving}
+            className="gap-1"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            إعادة تعيين
+          </Button>
+          <Button
+            size="sm"
+            onClick={onSave}
+            disabled={isSaving || !hasChanges}
+            className="gap-1"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                جاري الحفظ...
+              </>
+            ) : hasChanges ? (
+              <>
+                <Save className="h-3.5 w-3.5" />
+                حفظ
+              </>
+            ) : (
+              <>
+                <Check className="h-3.5 w-3.5" />
+                محفوظ
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      <div className="space-y-4 pt-2 border-t border-border">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const SettingsTabs = ({ activeTab, onChange }: { activeTab: SettingsTabId; onChange: (tab: SettingsTabId) => void }) => {
+  return (
+    <div className="flex gap-1 p-1 bg-muted rounded-lg border border-border" role="tablist" aria-label="أقسام الإعدادات">
+      {SETTINGS_TABS.map(tab => (
+        <button
+          key={tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          aria-controls={`panel-${tab.id}`}
+          id={`tab-${tab.id}`}
+          onClick={() => onChange(tab.id)}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+            activeTab === tab.id
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+          )}
+        >
+          <span>{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export const Settings = () => {
   const { t } = useTranslation('settings');
   const {
     settings,
-    updateSetting,
-    resetSection,
-    saveSection,
+    updateSettings,
     hasUnsavedChanges,
     isSaving,
     lastSaved,
-  } = useSettingsStore();
+  } = useStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
   const [localSettings, setLocalSettings] = useState(settings);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const handleSettingChange = (key: string, value: unknown) => {
-    setLocalSettings(prev => ({ ...prev, [key]: value }));
+    setLocalSettings(prev => {
+      const keys = key.split('.');
+      const newSettings = { ...prev };
+      let current: Record<string, unknown> = newSettings;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        current[keys[i]] = { ...(current[keys[i]] as Record<string, unknown> || {}) };
+        current = current[keys[i]] as Record<string, unknown>;
+      }
+      current[keys[keys.length - 1]] = value;
+      return newSettings;
+    });
   };
 
   const handleSave = async () => {
-    await saveSection(activeTab, localSettings);
+    setSaveStatus('saving');
+    await updateSettings(localSettings);
+    setSaveStatus('saved');
+    setTimeout(() => setSaveStatus('idle'), 2000);
   };
 
   const handleReset = () => {
-    resetSection(activeTab);
     setLocalSettings(settings);
   };
+
+  const hasTabChanges = useMemo(() => {
+    return JSON.stringify(localSettings) !== JSON.stringify(settings);
+  }, [localSettings, settings]);
 
   const renderGeneralTab = () => (
     <>
@@ -50,11 +291,11 @@ export const Settings = () => {
         type="select"
         label={t('general.language')}
         description={t('general.languageDesc')}
-        value={localSettings.general?.language || 'en'}
+        value={localSettings.general?.language || 'ar'}
         onChange={v => handleSettingChange('general.language', v)}
         options={[
-          { value: 'en', label: 'English' },
           { value: 'ar', label: 'العربية' },
+          { value: 'en', label: 'English' },
         ]}
       />
       <SettingItem
@@ -222,15 +463,6 @@ export const Settings = () => {
         value={localSettings.ai?.systemPrompt || ''}
         onChange={v => handleSettingChange('ai.systemPrompt', v)}
         placeholder={t('ai.systemPromptPlaceholder')}
-        rows={4}
-      />
-      <SettingItem
-        key="aiEnableTools"
-        type="switch"
-        label={t('ai.enableTools')}
-        description={t('ai.enableToolsDesc')}
-        checked={localSettings.ai?.enableTools ?? true}
-        onChange={v => handleSettingChange('ai.enableTools', v)}
       />
     </>
   );
@@ -279,34 +511,11 @@ export const Settings = () => {
         checked={localSettings.appearance?.animations ?? true}
         onChange={v => handleSettingChange('appearance.animations', v)}
       />
-      <SettingItem
-        key="fontFamily"
-        type="select"
-        label={t('appearance.fontFamily')}
-        description={t('appearance.fontFamilyDesc')}
-        value={localSettings.appearance?.fontFamily || 'system'}
-        onChange={v => handleSettingChange('appearance.fontFamily', v)}
-        options={[
-          { value: 'system', label: t('appearance.systemFont') },
-          { value: 'monospace', label: 'Monospace' },
-          { value: 'inter', label: 'Inter' },
-          { value: 'jetbrains', label: 'JetBrains Mono' },
-          { value: 'fira', label: 'Fira Code' },
-        ]}
-      />
     </>
   );
 
   const renderAdvancedTab = () => (
     <>
-      <SettingItem
-        key="experimentalFeatures"
-        type="switch"
-        label={t('advanced.experimentalFeatures')}
-        description={t('advanced.experimentalFeaturesDesc')}
-        checked={localSettings.advanced?.experimentalFeatures ?? false}
-        onChange={v => handleSettingChange('advanced.experimentalFeatures', v)}
-      />
       <SettingItem
         key="debugMode"
         type="switch"
@@ -330,28 +539,15 @@ export const Settings = () => {
         ]}
       />
       <SettingItem
-        key="cacheSize"
+        key="maxLogFiles"
         type="number"
-        label={t('advanced.cacheSize')}
-        description={t('advanced.cacheSizeDesc')}
-        value={localSettings.advanced?.cacheSize || 500}
-        onChange={v => handleSettingChange('advanced.cacheSize', Number(v))}
-        min={50}
-        max={5000}
+        label={t('advanced.maxLogFiles')}
+        description={t('advanced.maxLogFilesDesc')}
+        value={localSettings.advanced?.maxLogFiles || 10}
+        onChange={v => handleSettingChange('advanced.maxLogFiles', Number(v))}
+        min={1}
+        max={100}
       />
-      <div className="pt-4 border-t border-border">
-        <button
-          type="button"
-          className="text-sm text-destructive hover:underline"
-          onClick={() => {
-            if (confirm(t('advanced.clearCacheConfirm'))) {
-              // Clear cache action
-            }
-          }}
-        >
-          {t('advanced.clearCache')}
-        </button>
-      </div>
     </>
   );
 
@@ -373,46 +569,89 @@ export const Settings = () => {
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <h1 className="text-2xl font-semibold">{t('title')}</h1>
-        <div className="flex items-center gap-3">
-          {hasUnsavedChanges && (
-            <span className="text-sm text-yellow-500 flex items-center gap-1">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
-              </span>
-              {t('unsavedChanges')}
-            </span>
-          )}
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{t('settings.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('settings.description')}</p>
+        </div>
+        <div className="flex items-center gap-2">
           {lastSaved && (
             <span className="text-xs text-muted-foreground">
-              {t('lastSaved', { time: new Date(lastSaved).toLocaleTimeString() })}
+              آخر حفظ: {new Date(lastSaved).toLocaleTimeString('ar-SA')}
             </span>
           )}
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        <SettingsTabs
-          tabs={SETTINGS_TABS}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
+      <SettingsTabs activeTab={activeTab} onChange={setActiveTab} />
 
-        <div className="mt-6 max-w-3xl">
+      <div 
+        id={`panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${activeTab}`}
+        className="space-y-4"
+      >
+        {activeTab === 'general' && (
           <SettingsSection
-            title={t(`tabs.${activeTab}`)}
-            description={t(`tabs.${activeTab}Desc`)}
-            isSaving={isSaving}
-            hasChanges={hasUnsavedChanges}
+            title={t('settings.tabs.general')}
+            description={t('general.description')}
+            isSaving={isSaving || saveStatus === 'saving'}
+            hasChanges={hasTabChanges}
             onSave={handleSave}
             onReset={handleReset}
           >
-            {renderTabContent()}
+            {renderGeneralTab()}
           </SettingsSection>
-        </div>
+        )}
+        {activeTab === 'editor' && (
+          <SettingsSection
+            title={t('settings.tabs.editor')}
+            description={t('editor.description')}
+            isSaving={isSaving || saveStatus === 'saving'}
+            hasChanges={hasTabChanges}
+            onSave={handleSave}
+            onReset={handleReset}
+          >
+            {renderEditorTab()}
+          </SettingsSection>
+        )}
+        {activeTab === 'ai' && (
+          <SettingsSection
+            title={t('settings.tabs.ai')}
+            description={t('ai.description')}
+            isSaving={isSaving || saveStatus === 'saving'}
+            hasChanges={hasTabChanges}
+            onSave={handleSave}
+            onReset={handleReset}
+          >
+            {renderAITab()}
+          </SettingsSection>
+        )}
+        {activeTab === 'appearance' && (
+          <SettingsSection
+            title={t('settings.tabs.appearance')}
+            description={t('appearance.description')}
+            isSaving={isSaving || saveStatus === 'saving'}
+            hasChanges={hasTabChanges}
+            onSave={handleSave}
+            onReset={handleReset}
+          >
+            {renderAppearanceTab()}
+          </SettingsSection>
+        )}
+        {activeTab === 'advanced' && (
+          <SettingsSection
+            title={t('settings.tabs.advanced')}
+            description={t('advanced.description')}
+            isSaving={isSaving || saveStatus === 'saving'}
+            hasChanges={hasTabChanges}
+            onSave={handleSave}
+            onReset={handleReset}
+          >
+            {renderAdvancedTab()}
+          </SettingsSection>
+        )}
       </div>
     </div>
   );
