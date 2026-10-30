@@ -24,6 +24,7 @@ const config: CapacitorConfig = {
     appendUserAgent: '2OneByte-Coder/1.0'
   },
   plugins: {
+    CapacitorHttp: { enabled: true },
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
