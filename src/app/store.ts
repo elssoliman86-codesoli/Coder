@@ -73,14 +73,20 @@ export const useStore = create<AppState>()(persist(immer((set, get) => ({
   }
 })), {
   name: '2onebyte-coder-storage',
-  storage: createJSONStorage(() => localStorage),
+  // All workspace data stays on this device in IndexedDB; no application database or cloud sync is used.
+  storage: createJSONStorage(() => ({
+    getItem: async (name: string) => (await get<string>(name)) ?? null,
+    setItem: async (name: string, value: string) => { await set(name, value); },
+    removeItem: async (name: string) => { await del(name); }
+  })),
   partialize: state => ({
-    projects: state.projects, currentProjectId: state.currentProjectId,
+    projects: state.projects, currentProjectId: state.currentProjectId, githubRepos: state.githubRepos,
     // API keys are intentionally excluded from persistent browser storage.
     providers: state.providers.map(({ apiKey, ...provider }) => ({ ...provider, apiKey: '' })),
     skills: state.skills, settings: state.settings, editQueue: state.editQueue
   }),
-  version: 2,
+  version: 3,
+  skipHydration: true,
   migrate: (persisted: any) => ({
     ...persisted,
     projects: Object.fromEntries(Object.entries(persisted?.projects ?? {}).map(([id, raw]: [string, any]) => [id, { ...raw, files: Array.isArray(raw?.files) ? raw.files : [] }])),
