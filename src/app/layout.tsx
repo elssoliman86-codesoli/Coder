@@ -22,7 +22,7 @@ export function Layout() {
     <div className={cn('min-h-screen bg-background flex', 'font-arabic')}>
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className={cn('flex-1 flex flex-col min-w-0', isWorkspace ? 'lg:pl-64' : '')}>
+      <div className={cn('flex-1 flex flex-col min-w-0', 'lg:pr-64')}>
         <Header onMenuClick={() => setSidebarOpen(true)} showMenu={!isWorkspace} />
 
         <main className={cn('flex-1 overflow-auto p-4 md:p-6 lg:p-8', isWorkspace ? 'pt-16' : 'pt-20')}>
