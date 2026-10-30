@@ -139,10 +139,27 @@ export async function testProviderConnection(provider: Provider, model: Model): 
 
 export function resolveActiveModel(): { provider: Provider; model: Model } | null {
   const providers = useStore.getState().providers;
-  const provider = providers.find(item => item.default) ?? providers[0];
-  if (!provider) return null;
-  const model = provider.models?.find(item => item.id === provider.selectedModelId) ?? provider.models?.[0];
-  return model ? { provider, model } : null;
+  if (!providers.length) return null;
+
+  const preferred = providers.find(item => item.default);
+  const ordered = preferred
+    ? [preferred, ...providers.filter(item => item.id !== preferred.id)]
+    : providers;
+
+  for (const provider of ordered) {
+    // A provider is usable only when its credentials are available and its model
+    // belongs to that provider. This avoids silently selecting a broken default.
+    if (provider.provider !== 'ollama' && !provider.apiKey?.trim()) continue;
+
+    const models = provider.models ?? [];
+    const selected = models.find(item =>
+      item.id === provider.selectedModelId && item.providerId === provider.id
+    );
+    const model = selected ?? models.find(item => item.providerId === provider.id);
+    if (model) return { provider, model };
+  }
+
+  return null;
 }
 
 function safeGeneratedPath(raw: unknown): string | null {
