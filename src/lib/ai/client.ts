@@ -2,6 +2,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import type { Model, Project, ProjectFile, Provider } from '@app/types';
 import { useStore } from '@app/store';
 import { getLanguageFromPath } from '@lib/utils';
+import { normalizeSafeProjectPath } from '@lib/files/paths';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 type ModelRow = { id?: string; name?: string; context_length?: number; context_window?: number };
@@ -163,26 +164,7 @@ export function resolveActiveModel(): { provider: Provider; model: Model } | nul
 }
 
 function safeGeneratedPath(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const path = raw.trim().replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!path || path.length > 240 || path.startsWith('/') || /^[a-z]:/i.test(path)) return null;
-
-  const parts = path.split('/');
-  const reservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
-  const invalidCharacters = /[<>:"|?*\u0000-\u001f]/;
-  if (parts.some(part =>
-    !part ||
-    part === '.' ||
-    part === '..' ||
-    part.toLowerCase() === '.git' ||
-    part.toLowerCase() === 'node_modules' ||
-    /^\.env(?:\.|$)/i.test(part) ||
-    invalidCharacters.test(part) ||
-    /[. ]$/.test(part) ||
-    reservedNames.test(part)
-  )) return null;
-
-  return path;
+  return normalizeSafeProjectPath(raw);
 }
 
 export async function generateProjectFiles(
