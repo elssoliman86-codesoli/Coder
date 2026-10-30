@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -17,18 +21,47 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@app/*": ["src/app/*"],
-      "@features/*": ["src/features/*"],
-      "@agents/*": ["src/agents/*"],
-      "@llm/*": ["src/llm/*"],
-      "@vfs/*": ["src/vfs/*"],
-      "@github/*": ["src/github/*"],
-      "@ui-reference/*": ["src/ui-reference/*"],
-      "@design/*": ["src/design/*"],
-      "@i18n/*": ["src/i18n/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@app/*": [
+        "src/app/*"
+      ],
+      "@features/*": [
+        "src/features/*"
+      ],
+      "@agents/*": [
+        "src/agents/*"
+      ],
+      "@llm/*": [
+        "src/llm/*"
+      ],
+      "@vfs/*": [
+        "src/vfs/*"
+      ],
+      "@github/*": [
+        "src/github/*"
+      ],
+      "@ui-reference/*": [
+        "src/ui-reference/*"
+      ],
+      "@design/*": [
+        "src/design/*"
+      ],
+      "@i18n/*": [
+        "src/i18n/*"
+      ],
+      "@components/*": [
+        "src/components/*"
+      ]
     }
   },
-  "include": ["src", "android/capacitor.config.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }
