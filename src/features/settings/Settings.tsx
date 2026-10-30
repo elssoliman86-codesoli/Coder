@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { nanoid } from 'nanoid';
-import { KeyRound, Plus, RefreshCw, Server, Trash2, Cpu, CheckCircle2, AlertCircle } from 'lucide-react';
+import { KeyRound, Plus, RefreshCw, Server, Trash2, Cpu } from 'lucide-react';
 import { useSettings, useStore, useProviders } from '@app/store';
 import { Button } from '@components/ui/button';
 import type { Model, Provider } from '@app/types';
@@ -17,7 +17,6 @@ export function Settings() {
   const providers = useProviders();
   const updateSettings = useStore(s => s.updateSettings);
   const addProvider = useStore(s => s.addProvider);
-  const updateProvider = useStore(s => s.updateProvider);
   const deleteProvider = useStore(s => s.deleteProvider);
   const setModels = useStore(s => s.setModels);
   const [providerType, setProviderType] = useState('openai');
