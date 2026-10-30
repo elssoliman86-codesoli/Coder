@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { nanoid } from 'nanoid';
 import { del } from 'idb-keyval';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { KeyRound, Plus, RefreshCw, Server, Trash2, Cpu } from 'lucide-react';
 import { useSettings, useStore, useProviders } from '@app/store';
 import { Button } from '@components/ui/button';
@@ -65,15 +66,26 @@ export function Settings() {
       let lastError = '';
       for (const endpoint of [...new Set(endpoints)]) {
         try {
-          const response = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
-          if (!response.ok) {
-            lastError = 'HTTP ' + response.status + ' من ' + endpoint;
-            if (response.status === 401 || response.status === 403) {
-              throw new Error('مفتاح API غير صحيح أو لا يملك صلاحية قراءة الموديلات (HTTP ' + response.status + ').');
+          let status: number;
+          if (Capacitor.isNativePlatform()) {
+            // Native HTTP avoids WebView CORS restrictions on Android/iOS.
+            const response = await CapacitorHttp.get({ url: endpoint, headers });
+            status = response.status;
+            if (status >= 200 && status < 300) {
+              data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+            }
+          } else {
+            const response = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
+            status = response.status;
+            if (response.ok) data = await response.json();
+          }
+          if (status < 200 || status >= 300) {
+            lastError = 'HTTP ' + status + ' من ' + endpoint;
+            if (status === 401 || status === 403) {
+              throw new Error('مفتاح API غير صحيح أو لا يملك صلاحية قراءة الموديلات (HTTP ' + status + ').');
             }
             continue;
           }
-          data = await response.json();
           break;
         } catch (error) {
           if (error instanceof Error && (error.message.startsWith('مفتاح API') || error.message.startsWith('Failed to fetch'))) throw error;
@@ -83,7 +95,7 @@ export function Settings() {
 
       if (!data) {
         if (/Failed to fetch|NetworkError|fetch/i.test(lastError)) {
-          throw new Error('تعذر الوصول إلى الخادم. تحقق من الإنترنت والرابط، وقد يكون السبب CORS. إذا كنت تستخدم Ollama فعّل السماح لأصل التطبيق عبر OLLAMA_ORIGINS، وعلى Android استخدم عنوان IP الخاص بالكمبيوتر بدلاً من localhost.');
+          throw new Error('تعذر الوصول إلى الخادم. تحقق من الإنترنت والرابط، وقد يكون السبب CORS. إذا كنت تستخدم Ollama من المتصفح فعّل OLLAMA_ORIGINS، وعلى Android استخدم عنوان IP الخاص بالكمبيوتر بدلاً من localhost.');
         }
         throw new Error(lastError || 'لم يستجب الخادم على مسارات جلب الموديلات المعتادة.');
       }
