@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import { ArrowRight, Code2, Smartphone, Globe, Terminal } from 'lucide-react';
@@ -44,7 +44,7 @@ export function NewProjectDialog() {
     setError('');
   };
 
-  const create = (event: React.FormEvent<HTMLFormElement>) => {
+  const create = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!draft.name.trim() || busy) return;
 
