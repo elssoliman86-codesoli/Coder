@@ -3,6 +3,7 @@ import { Plus, FolderOpen, Code2, Smartphone, Globe, Terminal, Trash2 } from 'lu
 import { Card } from '@components/ui/card';
 import { Button } from '@components/ui/button';
 import { useStore } from '@app/store';
+import type { Project } from '@app/types';
 
 const types: {id:Project['type'];label:string;Icon:typeof Globe}[] = [
   {id:'website',label:'موقع ويب',Icon:Globe},
