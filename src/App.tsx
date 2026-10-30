@@ -21,6 +21,8 @@ function prepareAppData(): Promise<void> {
         const legacy = localStorage.getItem('2onebyte-coder-storage');
         if (legacy) await set('2onebyte-coder-storage', legacy);
       }
+      // Remove the legacy browser-storage copy only after IndexedDB is confirmed/migrated.
+      try { localStorage.removeItem('2onebyte-coder-storage'); } catch { /* Storage may be unavailable in restricted contexts. */ }
       await useStore.persist.rehydrate();
       await restoreProviderSecrets();
     })().catch(error => {
