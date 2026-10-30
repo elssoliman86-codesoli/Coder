@@ -18,12 +18,13 @@ export function Workspace() {
   const files = useMemo(() => project?.files ?? [], [project?.files]);
 
   useEffect(() => {
-    if (!project) return;
-    setCurrentProject(project.id);
-    const first = project.files?.[0];
+    const current = useStore.getState().projects[projectId];
+    if (!current) return;
+    setCurrentProject(current.id);
+    const first = current.files?.[0];
     if (first) { setPath(first.path); setContent(first.content ?? ''); }
-    else { setPath('README.md'); setContent('# ' + project.name + '\n\nابدأ كتابة ملفات مشروعك هنا.'); }
-  }, [projectId, project?.id, setCurrentProject]);
+    else { setPath('README.md'); setContent('# ' + current.name + '\n\nابدأ كتابة ملفات مشروعك هنا.'); }
+  }, [projectId, setCurrentProject]);
 
   if (!project) return <div className="space-y-4 rounded-2xl border border-border bg-card p-6"><p>المشروع غير موجود أو لم يتم تحميل بياناته.</p><Button onClick={() => navigate('/')}>العودة للمشاريع</Button></div>;
 
