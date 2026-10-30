@@ -41,21 +41,21 @@ export const useStore = create<AppState>()(persist(immer((set, get) => ({
   setCurrentProject: id => set({ currentProjectId: id }),
   providers: [],
   addProvider: provider => set(state => { state.providers.push(provider); }),
-  updateProvider: (id, updates) => set(state => { const item = state.providers.find(p => p.id === id); if (item) Object.assign(item, updates); }),
-  deleteProvider: id => set(state => { state.providers = state.providers.filter(p => p.id !== id); }),
-  setModels: (providerId, models) => set(state => { const item = state.providers.find(p => p.id === providerId); if (item) item.models = models; }),
-  updateModelStatus: (providerId, modelId, status) => set(state => { const model = state.providers.find(p => p.id === providerId)?.models.find(m => m.id === modelId); if (model) model.status = status; }),
+  updateProvider: (id, updates) => set(state => { const item = state.providers.find(provider => provider.id === id); if (item) Object.assign(item, updates); }),
+  deleteProvider: id => set(state => { state.providers = state.providers.filter(provider => provider.id !== id); }),
+  setModels: (providerId, models) => set(state => { const item = state.providers.find(provider => provider.id === providerId); if (item) item.models = models; }),
+  updateModelStatus: (providerId, modelId, status) => set(state => { const model = state.providers.find(provider => provider.id === providerId)?.models.find(item => item.id === modelId); if (model) model.status = status; }),
   githubToken: null, setGitHubToken: token => set({ githubToken: token }),
   githubRepos: [], setGitHubRepos: repos => set({ githubRepos: repos }),
   skills: [], setSkills: skills => set({ skills }),
   addSkill: skill => set(state => { state.skills.push(skill); }),
-  updateSkill: (name, updates) => set(state => { const skill = state.skills.find(s => s.name === name); if (skill) Object.assign(skill, updates); }),
-  deleteSkill: name => set(state => { state.skills = state.skills.filter(s => s.name !== name); }),
+  updateSkill: (name, updates) => set(state => { const skill = state.skills.find(item => item.name === name); if (skill) Object.assign(skill, updates); }),
+  deleteSkill: name => set(state => { state.skills = state.skills.filter(item => item.name !== name); }),
   settings: defaultSettings, updateSettings: updates => set(state => { Object.assign(state.settings, updates); }),
   sidebarOpen: false, toggleSidebar: () => set(state => { state.sidebarOpen = !state.sidebarOpen; }), setSidebarOpen: open => set({ sidebarOpen: open }),
   editQueue: [], addToQueue: item => set(state => { state.editQueue.push(item); }),
   removeFromQueue: id => set(state => { state.editQueue = state.editQueue.filter(item => item.id !== id); }),
-  updateQueueItem: (id, updates) => set(state => { const item = state.editQueue.find(q => q.id === id); if (item) Object.assign(item, updates); }),
+  updateQueueItem: (id, updates) => set(state => { const item = state.editQueue.find(entry => entry.id === id); if (item) Object.assign(item, updates); }),
   reorderQueue: items => set({ editQueue: items }), clearQueue: () => set({ editQueue: [] }),
   initialized: false,
   initialize: async () => {
@@ -74,7 +74,6 @@ export const useStore = create<AppState>()(persist(immer((set, get) => ({
   }
 })), {
   name: '2onebyte-coder-storage',
-  // All workspace data stays on this device in IndexedDB; no application database or cloud sync is used.
   storage: createJSONStorage(() => ({
     getItem: async (name: string) => (await get<string>(name)) ?? null,
     setItem: async (name: string, value: string) => { await set(name, value); },
@@ -82,16 +81,15 @@ export const useStore = create<AppState>()(persist(immer((set, get) => ({
   })),
   partialize: state => ({
     projects: state.projects, currentProjectId: state.currentProjectId, githubRepos: state.githubRepos,
-    // API keys are intentionally excluded from persistent browser storage.
     providers: state.providers.map(({ apiKey, ...provider }) => ({ ...provider, apiKey: '' })),
     skills: state.skills, settings: state.settings, editQueue: state.editQueue
   }),
-  version: 3,
+  version: 4,
   skipHydration: true,
   migrate: (persisted: any) => ({
     ...persisted,
     projects: Object.fromEntries(Object.entries(persisted?.projects ?? {}).map(([id, raw]: [string, any]) => [id, { ...raw, files: Array.isArray(raw?.files) ? raw.files : [] }])),
-    providers: Array.isArray(persisted?.providers) ? persisted.providers.map((p: Provider) => ({ ...p, apiKey: '', models: Array.isArray(p.models) ? p.models : [] })) : [],
+    providers: Array.isArray(persisted?.providers) ? persisted.providers.map((provider: Provider) => ({ ...provider, apiKey: '', models: Array.isArray(provider.models) ? provider.models : [] })) : [],
     settings: { ...defaultSettings, ...(persisted?.settings ?? {}) },
     skills: Array.isArray(persisted?.skills) ? persisted.skills : [],
     editQueue: Array.isArray(persisted?.editQueue) ? persisted.editQueue : []

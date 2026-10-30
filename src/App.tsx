@@ -1,35 +1,41 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
 import { useStore } from '@app/store';
 import { get, set } from 'idb-keyval';
 import { Layout } from '@app/layout';
 import { LoadingScreen } from '@components/ui/loading-screen';
+import { restoreProviderSecrets } from '@lib/ai/secrets';
 
-// Lazy load heavy routes
-const Home = lazy(() => import('@features/home/Home').then(m => ({ default: m.Home })));
-const Workspace = lazy(() => import('@features/workspace/Workspace').then(m => ({ default: m.Workspace })));
-const Settings = lazy(() => import('@features/settings/Settings').then(m => ({ default: m.Settings })));
-const NewProject = lazy(() => import('@features/home/NewProjectDialog').then(m => ({ default: m.NewProjectDialog })));
+const Home = lazy(() => import('@features/home/Home').then(module => ({ default: module.Home })));
+const Workspace = lazy(() => import('@features/workspace/Workspace').then(module => ({ default: module.Workspace })));
+const Settings = lazy(() => import('@features/settings/Settings').then(module => ({ default: module.Settings })));
+const NewProject = lazy(() => import('@features/home/NewProjectDialog').then(module => ({ default: module.NewProjectDialog })));
 
 function App() {
   const initialize = useStore(state => state.initialize);
+  const initialized = useStore(state => state.initialized);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      // One-time migration: copy existing device-local localStorage data into IndexedDB.
-      const stored = await get<string>('2onebyte-coder-storage');
-      if (!stored) {
-        const legacy = localStorage.getItem('2onebyte-coder-storage');
-        if (legacy) await set('2onebyte-coder-storage', legacy);
+      try {
+        const stored = await get<string>('2onebyte-coder-storage');
+        if (!stored) {
+          const legacy = localStorage.getItem('2onebyte-coder-storage');
+          if (legacy) await set('2onebyte-coder-storage', legacy);
+        }
+        await useStore.persist.rehydrate();
+        await restoreProviderSecrets();
+        if (active) await initialize();
+      } catch (error) {
+        console.error('Application initialization failed', error);
+        if (active) await initialize();
       }
-      // Hydrate the local IndexedDB before initializing skills or rendering persisted workspace state.
-      await useStore.persist.rehydrate();
-      if (active) await initialize();
     })();
     return () => { active = false; };
   }, [initialize]);
+
+  if (!initialized) return <LoadingScreen />;
 
   return (
     <Suspense fallback={<LoadingScreen />}>
