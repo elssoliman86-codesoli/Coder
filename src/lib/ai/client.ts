@@ -134,7 +134,7 @@ export async function testProviderConnection(provider: Provider, model: Model): 
     { role: 'system', content: 'You are a connectivity test. Reply with exactly: OK' },
     { role: 'user', content: 'Reply exactly: OK' }
   ], { maxTokens: 8, temperature: 0 });
-  if (!reply.toUpperCase().includes('OK')) throw new Error('وصل رد من الموديل لكن نتيجة الاختبار غير متوقعة: ' + reply.slice(0, 100));
+  if (reply.trim().toUpperCase() !== 'OK') throw new Error('وصل رد من الموديل لكن نتيجة الاختبار غير متوقعة: ' + reply.slice(0, 100));
 }
 
 export function resolveActiveModel(): { provider: Provider; model: Model } | null {
@@ -165,7 +165,7 @@ export function resolveActiveModel(): { provider: Provider; model: Model } | nul
 function safeGeneratedPath(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const path = raw.trim().replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!path || path.length > 240 || path.startsWith('/') || /^[a-z]:/i.test(path) || path.includes('\\0')) return null;
+  if (!path || path.length > 240 || path.startsWith('/') || /^[a-z]:/i.test(path)) return null;
 
   const parts = path.split('/');
   const reservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
@@ -215,6 +215,7 @@ export async function generateProjectFiles(
   } catch {
     throw new Error('تعذر قراءة JSON الذي أرجعه الموديل. أعد المحاولة أو اختر موديلًا آخر.');
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('استجابة الموديل ليست كائن JSON صالحًا.');
   if (!Array.isArray(parsed.files)) throw new Error('استجابة الموديل لا تحتوي على قائمة ملفات.');
   const now = Date.now();
   const seen = new Set<string>();
