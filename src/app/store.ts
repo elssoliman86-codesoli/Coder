@@ -88,6 +88,8 @@ export const useStore = create<AppState>()(persist(immer((set, get) => ({
   skipHydration: true,
   migrate: (persisted: any) => ({
     ...persisted,
+    // Never restore legacy GitHub credentials from persisted application state.
+    githubToken: null,
     projects: Object.fromEntries(Object.entries(persisted?.projects ?? {}).map(([id, raw]: [string, any]) => [id, { ...raw, files: Array.isArray(raw?.files) ? raw.files : [] }])),
     providers: Array.isArray(persisted?.providers) ? persisted.providers.map((provider: Provider) => ({ ...provider, apiKey: '', models: Array.isArray(provider.models) ? provider.models : [] })) : [],
     settings: { ...defaultSettings, ...(persisted?.settings ?? {}) },
