@@ -21,21 +21,10 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: false,
     backgroundColor: '#0f172a',
     loggingBehavior: 'debug',
-    appendUserAgent: '2OneByte-Coder/1.0',
-    permissions: [
-      'android.permission.INTERNET',
-      'android.permission.ACCESS_NETWORK_STATE',
-      'android.permission.WAKE_LOCK',
-      'android.permission.FOREGROUND_SERVICE',
-      'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
-      'android.permission.POST_NOTIFICATIONS',
-      'android.permission.VIBRATE',
-      'android.permission.READ_EXTERNAL_STORAGE',
-      'android.permission.WRITE_EXTERNAL_STORAGE',
-      'android.permission.MANAGE_EXTERNAL_STORAGE'
-    ]
+    appendUserAgent: '2OneByte-Coder/1.0'
   },
   plugins: {
+    CapacitorHttp: { enabled: true },
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,

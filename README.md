@@ -1,81 +1,45 @@
 # 2OneByte-Coder
 
-**منشئ تطبيقات بالذكاء الاصطناعي — احترافي، عربي أولًا (RTL)، يعمل كـ APK أندرويد و PWA.**
+**الهدف:** منشئ تطبيقات بالذكاء الاصطناعي، عربي أولًا (RTL)، يعمل على Android عبر Capacitor وكتطبيق ويب/PWA.
 
-تطبيق شامل لتوليد الكود باستخدام فريق من نماذج الذكاء الاصطناعي المتخصصة، يخطط ويكتب ويعرض ويراجع ويصلح وينشر المشاريع على GitHub مباشرة من جهازك.
+> **حالة التطوير:** هذا المستودع قيد التنفيذ. وجود مكتبات أو أنواع أو ملفات إعداد لا يعني أن الميزة مكتملة أو مختبرة. راجع [حالة التنفيذ ومعايير القبول](docs/IMPLEMENTATION-STATUS.md) قبل الاعتماد على أي وظيفة.
 
-## المميزات الرئيسية
+## الرؤية
 
-- 🤖 **فريق وكلاء متخصص** — Planner, Coder, Observer, Visual Critic, Fixer, Expert, Release Engineer
-- 🎨 **نظام تصميم مبني على NameThatUI** — مصطلحات واجهات دقيقة، أسلوب Minimalism + Glassmorphism
-- 📱 **تطبيق أصلي لأندرويد (APK) و PWA** — نفس الكود يعمل في كل مكان عبر Capacitor
-- 🔄 **مراجعة بصرية حية** — مراقبة، اكتشاف عيوب، إصلاح آلي، تكرار حتى الجودة
-- 📦 **نشر متكامل على GitHub** — إنشاء ريبو، workflows، GitHub Pages، إصدارات موقعة
-- 🌐 **دعم RTL كامل** — عربي افتراضي، إنجليزي مدعوم، خطوط وأرقام واتجاه صحيح
-- 🔐 **أمان محلي** — مفاتيح API وتوكنات GitHub في مخزن مشفر للجهاز فقط
+يهدف التطبيق إلى تمكين المستخدم من وصف مشروع، ثم تخطيطه وتوليد ملفاته داخل محرر، ومعاينته ومراجعته، وإجراء إصلاحات، ثم نشره على GitHub. الوكلاء المتخصصون، المعاينة الحقيقية، وفحوص الجودة هي أهداف تطوير وليست مزايا نعلن اكتمالها قبل اجتياز اختبارات القبول.
 
-## هيكل المشروع
+## التقنية الموجودة في المستودع
 
-```
-2OneByte-Coder/
-├── README.md
-├── LICENSE
-├── CHANGELOG.md
-├── docs/
-│   ├── PROMPT.md
-│   ├── ARCHITECTURE.md
-│   ├── DESIGN.md
-│   └── SECURITY.md
-├── skills/                 # المهارات المدمجة
-├── src/
-│   ├── app/                # المسارات والشاشات
-│   ├── features/           # الميزات (home, workspace, settings, preview, publish, queue)
-│   ├── agents/             # الوكلاء السبعة
-│   ├── llm/                # عميل LLM موحد
-│   ├── vfs/                # نظام ملفات افتراضي
-│   ├── github/             # عميل GitHub وقوالب workflows
-│   ├── ui-reference/       # أداة ui_lookup وذاكرة تخزين مؤقت
-│   ├── design/             # tokens، المكونات
-│   └── i18n/               # الترجمة (ar, en)
-├── android/                # مشروع Capacitor للأندرويد
-└── .github/workflows/      # CI، بناء APK، الإصدار
-```
+- React + TypeScript + Vite
+- Tailwind CSS وRadix UI
+- Capacitor Android
+- CodeMirror 6 وxterm.js ضمن التبعيات
+- Zustand للحالة
+- GitHub Actions مبدئيًا
 
 ## متطلبات التطوير
 
 - Node.js 20+
-- pnpm 9+
-- Android Studio (لبناء APK)
-- Java 17+ (لـ Gradle)
+- npm (لا يوجد lockfile موحد ومثبت حاليًا؛ يجب تثبيت مدير الحزم قبل اعتماد CI)
+- Java 17+ وAndroid SDK لبناء Android
 
-## التثبيت والتشغيل
+## التشغيل المحلي
 
 ```bash
-# تثبيت التبعيات
-pnpm install
-
-# تشغيل وضع التطوير (الويب)
-pnpm dev
-
-# بناء للإنتاج
-pnpm build
-
-# مزامنة وفتح مشروع الأندرويد
-pnpm cap sync
-pnpm cap open android
+npm install
+npm run dev
 ```
 
-## البناء التلقائي (GitHub Actions)
+أوامر البناء والاختبارات لا تعتبر ناجحة إلا بعد تشغيلها على نسخة الريبو الحالية وتسجيل نتائجها. لا تستخدم مفاتيح API أو توكنات GitHub داخل ملفات المشروع أو سجلات البناء.
 
-المستودع يتضمن workflows لـ:
-- **CI** — اختبارات، Линت، type-check عند كل push
-- **Build APK** — بناء APK موقع وإرفاقه في Release
-- **Release** — نشر تلقائي عند إنشاء tag
+## Android
+
+إعداد Capacitor موجود، لكن لا يوجد حاليًا إثبات بناء APK قابل للتثبيت. يجب إكمال ملفات موارد Android وGradle Wrapper، والتحقق من تبعيات Capacitor، ثم بناء Debug APK واختباره قبل إعداد Release موقّع.
+
+## التصميم والإسناد
+
+قاموس الواجهات: [NameThatUI](https://namethatui.com). لا تُنسب إليه عناصر تصميم أو نتائج بحث لم يتم الرجوع إليها فعليًا.
 
 ## الترخيص
 
-MIT License — راجع ملف [LICENSE](LICENSE) للتفاصيل.
-
----
-
-**قاموس الواجهات:** [NameThatUI](https://namethatui.com) — تُستخدم مصطلحات بصرية دقيقة لكل قرار واجهات.
+MIT — راجع [LICENSE](LICENSE).
