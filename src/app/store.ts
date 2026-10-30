@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { get, set, del } from 'idb-keyval';
 import type { Project, Provider, Model, Skill, GitHubToken, UserSettings } from '@app/types';
 
 interface EditQueueItem {
