@@ -4,26 +4,10 @@ import { ArrowRight, FileCode2, Save, Plus, FolderOpen, Check, LoaderCircle, Ale
 import { useStore, useSettings } from '@app/store';
 import { Button } from '@components/ui/button';
 import { getLanguageFromPath } from '@lib/utils';
+import { normalizeSafeProjectPath } from '@lib/files/paths';
 import { generateProjectFiles, resolveActiveModel } from '@lib/ai/client';
 import { CodeEditor } from './CodeEditor';
 
-function normalizeWorkspacePath(value: string): string | null {
-  const path = value.trim().replace(/\\/g, '/');
-  if (!path || path.length > 240 || path.startsWith('/') || /^[a-z]:/i.test(path)) return null;
-  const reservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
-  const invalidCharacters = /[<>:"|?*\u0000-\u001f]/;
-  const parts = path.split('/');
-  if (parts.some(part =>
-    !part || part === '.' || part === '..' ||
-    part.toLowerCase() === '.git' ||
-    part.toLowerCase() === 'node_modules' ||
-    /^\.env(?:\.|$)/i.test(part) ||
-    invalidCharacters.test(part) ||
-    /[. ]$/.test(part) ||
-    reservedNames.test(part)
-  )) return null;
-  return path;
-}
 
 export function Workspace() {
   const { projectId = '' } = useParams();
@@ -161,7 +145,7 @@ export function Workspace() {
   };
 
   const createFile = () => {
-    const clean = normalizeWorkspacePath(newPath);
+    const clean = normalizeSafeProjectPath(newPath);
     if (!clean) {
       setFileError('مسار الملف غير صالح أو يحتوي على اسم محظور.');
       return;
@@ -213,7 +197,7 @@ export function Workspace() {
 
   const commitRename = () => {
     if (!renameTarget) return;
-    const clean = normalizeWorkspacePath(renameValue);
+    const clean = normalizeSafeProjectPath(renameValue);
     if (!clean) {
       setFileError('اسم الملف الجديد غير صالح.');
       return;
