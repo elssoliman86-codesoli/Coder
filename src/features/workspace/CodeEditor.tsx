@@ -16,6 +16,10 @@ interface CodeEditorProps {
   value: string;
   language: string;
   onChange: (value: string) => void;
+  fontSize?: number;
+  tabSize?: number;
+  wordWrap?: boolean;
+  readOnly?: boolean;
 }
 
 function languageExtension(language: string) {
@@ -36,7 +40,15 @@ function languageExtension(language: string) {
   }
 }
 
-export function CodeEditor({ value, language, onChange }: CodeEditorProps) {
+export function CodeEditor({
+  value,
+  language,
+  onChange,
+  fontSize = 14,
+  tabSize = 2,
+  wordWrap = true,
+  readOnly = false
+}: CodeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -45,42 +57,46 @@ export function CodeEditor({ value, language, onChange }: CodeEditorProps) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const state = EditorState.create({
-      doc: value,
-      extensions: [
-        lineNumbers(),
-        foldGutter(),
-        highlightActiveLineGutter(),
-        highlightActiveLine(),
-        drawSelection(),
-        history(),
-        indentOnInput(),
-        bracketMatching(),
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        languageExtension(language),
-        EditorView.lineWrapping,
-        EditorView.updateListener.of(update => {
-          if (update.docChanged) onChangeRef.current(update.state.doc.toString());
-        }),
-        EditorView.theme({
-          '&': { height: '100%', fontSize: '13px', backgroundColor: '#0b1120', color: '#e2e8f0' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: "'JetBrains Mono', monospace", lineHeight: '1.7' },
-          '.cm-content': { padding: '16px 0', caretColor: '#38bdf8' },
-          '.cm-gutters': { backgroundColor: '#0b1120', color: '#64748b', border: 'none' },
-          '.cm-activeLine': { backgroundColor: '#172033' },
-          '.cm-activeLineGutter': { backgroundColor: '#172033' },
-          '&.cm-focused': { outline: 'none' },
-          '.cm-selectionBackground': { backgroundColor: '#1e3a5f !important' }
-        })
-      ]
-    });
+
+    const safeFontSize = Math.min(28, Math.max(10, fontSize));
+    const safeTabSize = Math.min(8, Math.max(1, Math.round(tabSize)));
+    const extensions = [
+      lineNumbers(),
+      foldGutter(),
+      highlightActiveLineGutter(),
+      highlightActiveLine(),
+      drawSelection(),
+      history(),
+      indentOnInput(),
+      bracketMatching(),
+      keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+      EditorState.tabSize.of(safeTabSize),
+      languageExtension(language),
+      ...(wordWrap ? [EditorView.lineWrapping] : []),
+      EditorView.editable.of(!readOnly),
+      EditorView.updateListener.of(update => {
+        if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+      }),
+      EditorView.theme({
+        '&': { height: '100%', fontSize: safeFontSize + 'px', backgroundColor: '#0b1120', color: '#e2e8f0' },
+        '.cm-scroller': { overflow: 'auto', fontFamily: "'JetBrains Mono', monospace", lineHeight: '1.7' },
+        '.cm-content': { padding: '16px 0', caretColor: '#38bdf8' },
+        '.cm-gutters': { backgroundColor: '#0b1120', color: '#64748b', border: 'none' },
+        '.cm-activeLine': { backgroundColor: '#172033' },
+        '.cm-activeLineGutter': { backgroundColor: '#172033' },
+        '&.cm-focused': { outline: 'none' },
+        '.cm-selectionBackground': { backgroundColor: '#1e3a5f !important' }
+      })
+    ];
+
+    const state = EditorState.create({ doc: value, extensions });
     const view = new EditorView({ state, parent: host });
     viewRef.current = view;
     return () => {
       view.destroy();
       viewRef.current = null;
     };
-  }, [language]);
+  }, [language, fontSize, tabSize, wordWrap, readOnly]);
 
   useEffect(() => {
     const view = viewRef.current;
