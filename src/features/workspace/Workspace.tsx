@@ -274,7 +274,7 @@ export function Workspace() {
             <span>{path || 'اختر ملفًا'}</span><span>{getLanguageFromPath(path || '')}</span>
           </div>
           <div className={'min-h-[55vh] flex-1 ' + (isGenerating ? 'pointer-events-none opacity-60' : '')}>
-            <CodeEditor value={content} language={getLanguageFromPath(path || '')} onChange={value => { setContent(value); setDirty(true); }}/>
+            <CodeEditor value={content} language={getLanguageFromPath(path || '')} fontSize={settings.fontSize} tabSize={settings.editorTabSize} wordWrap={settings.wordWrap} readOnly={isGenerating} onChange={value => { setContent(value); setDirty(true); }}/>
           </div>
         </div>
       </div>
