@@ -58,7 +58,7 @@ export function Settings() {
           ? [root + '/models', root.slice(0, -3) + '/v1/models']
           : [root + '/v1/models', root + '/models'];
       const key = (apiKeyDrafts[provider.id] ?? provider.apiKey ?? '').trim();
-      const headers: HeadersInit = { Accept: 'application/json' };
+      const headers: Record<string, string> = { Accept: 'application/json' };
       if (key) headers.Authorization = 'Bearer ' + key;
 
       let data: any = null;
@@ -94,7 +94,7 @@ export function Settings() {
       if (rows.length === 0) throw new Error('اتصلنا بالخادم لكن لم يرجع أي موديلات.');
 
       const existing = provider.models ?? [];
-      const byId = new Map(existing.map(model => [model.id, model]));
+      const byId = new Map<string, Model>(existing.map(model => [model.id, model] as const));
       for (const row of rows) {
         const id = String(row.id ?? row.name ?? '').trim();
         if (!id) continue;
