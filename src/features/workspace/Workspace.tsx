@@ -171,14 +171,18 @@ export function Workspace() {
     const match = existing.find(file => file.path.toLowerCase() === clean.toLowerCase());
     if (match) {
       if (dirty) saveFile(path, content);
-      setPath(match.path);
-      setContent(match.content ?? '');
+      const latest = useStore.getState().projects[projectId];
+      const latestMatch = latest?.files?.find(file => file.path === match.path) ?? match;
+      setPath(latestMatch.path);
+      setContent(latestMatch.content ?? '');
       setDirty(false);
       setNewPath('');
       return;
     }
 
     if (dirty) saveFile(path, content);
+    const latest = useStore.getState().projects[projectId];
+    const latestFiles = latest?.files ?? existing;
     const now = Date.now();
     const file = {
       path: clean,
@@ -189,7 +193,7 @@ export function Workspace() {
       lastModified: now
     };
     updateProject(projectId, {
-      files: [...existing, file].sort((a, b) => a.path.localeCompare(b.path)),
+      files: [...latestFiles, file].sort((a, b) => a.path.localeCompare(b.path)),
       updatedAt: now
     });
     setPath(clean);
