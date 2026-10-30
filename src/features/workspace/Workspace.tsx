@@ -7,6 +7,24 @@ import { getLanguageFromPath } from '@lib/utils';
 import { generateProjectFiles, resolveActiveModel } from '@lib/ai/client';
 import { CodeEditor } from './CodeEditor';
 
+function normalizeWorkspacePath(value: string): string | null {
+  const path = value.trim().replace(/\\/g, '/');
+  if (!path || path.length > 240 || path.startsWith('/') || /^[a-z]:/i.test(path)) return null;
+  const reservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+  const invalidCharacters = /[<>:"|?*\u0000-\u001f]/;
+  const parts = path.split('/');
+  if (parts.some(part =>
+    !part || part === '.' || part === '..' ||
+    part.toLowerCase() === '.git' ||
+    part.toLowerCase() === 'node_modules' ||
+    /^\.env(?:\.|$)/i.test(part) ||
+    invalidCharacters.test(part) ||
+    /[. ]$/.test(part) ||
+    reservedNames.test(part)
+  )) return null;
+  return path;
+}
+
 export function Workspace() {
   const { projectId = '' } = useParams();
   const navigate = useNavigate();
@@ -17,6 +35,7 @@ export function Workspace() {
   const [path, setPath] = useState('');
   const [content, setContent] = useState('');
   const [newPath, setNewPath] = useState('');
+  const [fileError, setFileError] = useState('');
   const [dirty, setDirty] = useState(false);
   const files = useMemo(() => project?.files ?? [], [project?.files]);
   const isGenerating = project?.generationStatus === 'running';
@@ -139,12 +158,12 @@ export function Workspace() {
   };
 
   const createFile = () => {
-    const clean = newPath.trim().replace(/\\/g, '/').replace(/^\/+/, '');
-    const parts = clean.split('/');
-    if (!clean || parts.some(part =>
-      !part || part === '.' || part === '..' || part === '.git' || part === 'node_modules' ||
-      part === '.env' || part.startsWith('.env.')
-    )) return;
+    const clean = normalizeWorkspacePath(newPath);
+    if (!clean) {
+      setFileError('مسار الملف غير صالح أو يحتوي على اسم محظور.');
+      return;
+    }
+    setFileError('');
 
     const current = useStore.getState().projects[projectId];
     if (!current) return;
@@ -241,12 +260,13 @@ export function Workspace() {
       <div className="grid min-h-[68vh] overflow-hidden rounded-2xl border border-border lg:grid-cols-[260px_1fr]">
         <aside className="border-b border-border bg-card p-3 lg:border-b-0 lg:border-l">
           <div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold text-muted-foreground">ملفات المشروع</p><FolderOpen size={15}/></div>
+          {fileError && <p role="alert" className="mb-2 text-xs text-destructive">{fileError}</p>}
           <div className="mb-3 flex gap-2">
             <input
               aria-label="مسار الملف الجديد"
               className="input-field min-w-0"
               value={newPath}
-              onChange={event => setNewPath(event.target.value)}
+              onChange={event => { setNewPath(event.target.value); setFileError(''); }}
               onKeyDown={event => { if (event.key === 'Enter') createFile(); }}
               placeholder="src/index.ts"
               disabled={isGenerating}
