@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { nanoid } from 'nanoid';
 import { del } from 'idb-keyval';
-import { KeyRound, Plus, RefreshCw, Server, Trash2, Cpu, Wifi, CheckCircle2 } from 'lucide-react';
+import { KeyRound, Plus, RefreshCw, Server, Trash2, Wifi, CheckCircle2 } from 'lucide-react';
 import { useSettings, useStore, useProviders } from '@app/store';
 import { Button } from '@components/ui/button';
 import type { Model, Provider } from '@app/types';
