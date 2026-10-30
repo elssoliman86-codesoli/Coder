@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - implementation/phase-0-audit-and-android-hardening
+      - repair/full-project-hardening
     tags:
       - 'v*'
 
