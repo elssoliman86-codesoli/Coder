@@ -132,6 +132,7 @@ export function Workspace() {
     const snapshot = useStore.getState().projects[projectId];
     if (!snapshot) return;
 
+    const preserveExistingFiles = Boolean(snapshot.generationSummary || snapshot.importedFrom || snapshot.generationStatus === 'complete');
     updateProject(projectId, { generationStatus: 'running', generationError: undefined });
     try {
       const result = await generateProjectFiles(snapshot, active.provider, active.model);
@@ -140,7 +141,7 @@ export function Workspace() {
 
       const merged = new Map(result.files.map(file => [file.path, file]));
       for (const file of latest.files ?? []) {
-        if (file.modified) merged.set(file.path, file);
+        if (file.modified || preserveExistingFiles) merged.set(file.path, file);
       }
       updateProject(projectId, {
         files: [...merged.values()].sort((a, b) => a.path.localeCompare(b.path)),
