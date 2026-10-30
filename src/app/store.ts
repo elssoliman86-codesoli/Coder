@@ -202,8 +202,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         projects: state.projects,
         currentProjectId: state.currentProjectId,
-        providers: state.providers,
-        githubToken: state.githubToken,
+        providers: state.providers.map(({ apiKey, ...provider }) => ({ ...provider, apiKey: '' })),
         skills: state.skills,
         settings: state.settings,
         editQueue: state.editQueue
