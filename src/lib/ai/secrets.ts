@@ -29,8 +29,13 @@ export function removeProviderSecret(providerId: string): Promise<void> {
 export async function restoreProviderSecrets(): Promise<void> {
   const providers = useStore.getState().providers;
   const restored = await Promise.all(providers.map(async provider => {
-    const apiKey = await get<string>(SECRET_PREFIX + provider.id);
-    return { id: provider.id, apiKey: typeof apiKey === 'string' ? apiKey : '' };
+    try {
+      const apiKey = await get<string>(SECRET_PREFIX + provider.id);
+      return { id: provider.id, apiKey: typeof apiKey === 'string' ? apiKey : '' };
+    } catch {
+      // A single unreadable secret must not prevent other providers from restoring.
+      return { id: provider.id, apiKey: '' };
+    }
   }));
 
   for (const item of restored) {
