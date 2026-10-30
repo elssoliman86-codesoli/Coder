@@ -20,6 +20,8 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
 }
 
+apply from: 'variables.gradle'
+
 allprojects {
     repositories {
         google()
