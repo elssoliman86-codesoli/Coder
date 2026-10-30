@@ -44,28 +44,78 @@ export function Settings() {
   };
 
   const discoverModels = async (provider: Provider) => {
-    setBusyId(provider.id); setNotice('');
+    setBusyId(provider.id);
+    setNotice('');
     try {
-      const root = provider.baseUrl.replace(/\/+$/, '');
-      const isOllama = provider.provider === 'ollama' || /:\d+$/i.test(root) && root.includes('11434');
-      const response = await fetch(isOllama ? root + '/api/tags' : root + '/models', {
-        headers: (apiKeyDrafts[provider.id] ?? provider.apiKey) ? { Authorization: 'Bearer ' + (apiKeyDrafts[provider.id] ?? provider.apiKey) } : {}
-      });
-      if (!response.ok) throw new Error('HTTP ' + response.status + ' — تحقق من الرابط ومفتاح API وإعدادات CORS.');
-      const data = await response.json();
-      const rows = isOllama ? (data.models ?? []).map((m: any) => ({ id: m.name, name: m.name })) : (data.data ?? data.models ?? []);
-      if (!Array.isArray(rows) || rows.length === 0) throw new Error('الخادم لم يرجع أي موديلات.');
+      const root = provider.baseUrl.trim().replace(/\\/+$/, '');
+      if (!root) throw new Error('أدخل Base URL صحيحاً للمزود.');
+
+      const isOllama = provider.provider === 'ollama' || /:11434(?:$|\\/)/i.test(root);
+      const endpoints = isOllama
+        ? [root + '/api/tags']
+        : root.endsWith('/v1')
+          ? [root + '/models', root.slice(0, -3) + '/v1/models']
+          : [root + '/v1/models', root + '/models'];
+      const key = (apiKeyDrafts[provider.id] ?? provider.apiKey ?? '').trim();
+      const headers: HeadersInit = { Accept: 'application/json' };
+      if (key) headers.Authorization = 'Bearer ' + key;
+
+      let data: any = null;
+      let lastError = '';
+      for (const endpoint of [...new Set(endpoints)]) {
+        try {
+          const response = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
+          if (!response.ok) {
+            lastError = 'HTTP ' + response.status + ' من ' + endpoint;
+            if (response.status === 401 || response.status === 403) {
+              throw new Error('مفتاح API غير صحيح أو لا يملك صلاحية قراءة الموديلات (HTTP ' + response.status + ').');
+            }
+            continue;
+          }
+          data = await response.json();
+          break;
+        } catch (error) {
+          if (error instanceof Error && (error.message.startsWith('مفتاح API') || error.message.startsWith('Failed to fetch'))) throw error;
+          lastError = error instanceof Error ? error.message : 'تعذر الاتصال بالخادم';
+        }
+      }
+
+      if (!data) {
+        if (/Failed to fetch|NetworkError|fetch/i.test(lastError)) {
+          throw new Error('تعذر الوصول إلى الخادم. تحقق من الإنترنت والرابط، وقد يكون السبب CORS. إذا كنت تستخدم Ollama فعّل السماح لأصل التطبيق عبر OLLAMA_ORIGINS، وعلى Android استخدم عنوان IP الخاص بالكمبيوتر بدلاً من localhost.');
+        }
+        throw new Error(lastError || 'لم يستجب الخادم على مسارات جلب الموديلات المعتادة.');
+      }
+
+      const rows = isOllama
+        ? (Array.isArray(data.models) ? data.models : []).map((model: any) => ({ id: model.name, name: model.name, context_length: model.details?.parameter_size }))
+        : (Array.isArray(data.data) ? data.data : Array.isArray(data.models) ? data.models : []);
+      if (rows.length === 0) throw new Error('اتصلنا بالخادم لكن لم يرجع أي موديلات.');
+
       const existing = provider.models ?? [];
-      const discovered: Model[] = rows.filter((m: any) => m.id || m.name).map((m: any) => {
-        const id = String(m.id ?? m.name);
-        const old = existing.find(x => x.id === id);
-        return old ?? { id, name: String(m.name ?? m.id), providerId: provider.id, contextWindow: m.context_length, status: 'untested', starred: false, assignedRoles: [] };
-      });
+      const byId = new Map(existing.map(model => [model.id, model]));
+      for (const row of rows) {
+        const id = String(row.id ?? row.name ?? '').trim();
+        if (!id) continue;
+        const previous = byId.get(id);
+        byId.set(id, previous ?? {
+          id,
+          name: String(row.name ?? row.id),
+          providerId: provider.id,
+          contextWindow: typeof row.context_length === 'number' ? row.context_length : undefined,
+          status: 'untested',
+          starred: false,
+          assignedRoles: []
+        });
+      }
+      const discovered = [...byId.values()];
       setModels(provider.id, discovered);
-      setNotice('تم تحميل ' + discovered.length + ' موديل من ' + provider.name + '.');
+      setNotice('تم جلب ' + rows.length + ' موديل واحتفظنا بالموديلات التي أضفتها يدوياً. إجمالي القائمة: ' + discovered.length + '.');
     } catch (error) {
-      setNotice('تعذر تحميل الموديلات: ' + (error instanceof Error ? error.message : 'خطأ غير معروف'));
-    } finally { setBusyId(null); }
+      setNotice('تعذر جلب الموديلات: ' + (error instanceof Error ? error.message : 'خطأ غير معروف'));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const setDefaultProvider = (providerId: string) => {
