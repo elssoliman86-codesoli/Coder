@@ -354,6 +354,7 @@ export function Workspace() {
               onChange={event => { setNewPath(event.target.value); setFileError(''); }}
               onKeyDown={event => { if (event.key === 'Enter') createFile(); }}
               placeholder="src/index.ts"
+              dir="ltr"
               disabled={isGenerating}
             />
             <Button size="icon" onClick={createFile} disabled={!newPath.trim() || isGenerating} aria-label="إنشاء ملف"><Plus size={16}/></Button>
@@ -361,7 +362,7 @@ export function Workspace() {
           {renameTarget && (
             <div className="mb-3 space-y-2 rounded-lg border border-primary/30 bg-background p-2">
               <label className="block text-xs text-muted-foreground" htmlFor="rename-file-path">المسار الجديد</label>
-              <input id="rename-file-path" className="input-field" value={renameValue} onChange={event => setRenameValue(event.target.value)} disabled={isGenerating}/>
+              <input id="rename-file-path" className="input-field" dir="ltr" value={renameValue} onChange={event => setRenameValue(event.target.value)} disabled={isGenerating}/>
               <div className="flex gap-2">
                 <Button size="sm" className="flex-1" onClick={commitRename} disabled={isGenerating}>حفظ الاسم</Button>
                 <Button size="sm" variant="outline" onClick={() => { setRenameTarget(null); setFileError(''); }}>إلغاء</Button>
@@ -378,7 +379,7 @@ export function Workspace() {
                   aria-current={path === file.path ? 'page' : undefined}
                   className={'flex min-h-11 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-lg px-2 py-2 text-right text-sm disabled:opacity-50 ' + (path === file.path ? 'bg-primary/10 text-primary' : 'hover:bg-accent')}
                 >
-                  <FileCode2 size={15} className="shrink-0"/><span className="truncate">{file.path}</span>
+                  <FileCode2 size={15} className="shrink-0"/><span dir="ltr" className="truncate text-left">{file.path}</span>
                 </button>
                 <Button size="icon" variant="ghost" aria-label={'إعادة تسمية ' + file.path} title="إعادة تسمية" disabled={isGenerating} onClick={() => beginRename(file.path)}><Pencil size={14}/></Button>
                 <Button size="icon" variant="ghost" aria-label={'حذف ' + file.path} title="حذف الملف" disabled={isGenerating} onClick={() => deleteFile(file.path)}><Trash2 size={14}/></Button>
