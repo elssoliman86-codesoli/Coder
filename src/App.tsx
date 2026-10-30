@@ -12,10 +12,16 @@ const Settings = lazy(() => import('@features/settings/Settings').then(m => ({ d
 const NewProject = lazy(() => import('@features/home/NewProjectDialog').then(m => ({ default: m.NewProjectDialog })));
 
 function App() {
-  const { initialize } = useStore();
+  const initialize = useStore(state => state.initialize);
 
   useEffect(() => {
-    initialize();
+    let active = true;
+    void (async () => {
+      // Hydrate the local IndexedDB before initializing skills or rendering persisted workspace state.
+      await useStore.persist.rehydrate();
+      if (active) await initialize();
+    })();
+    return () => { active = false; };
   }, [initialize]);
 
   return (
