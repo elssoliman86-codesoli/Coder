@@ -4,6 +4,7 @@ import { ArrowRight, FileCode2, Save, Plus, FolderOpen, Check, LoaderCircle, Ale
 import { useStore, useSettings } from '@app/store';
 import { Button } from '@components/ui/button';
 import { getLanguageFromPath } from '@lib/utils';
+import { generateProjectFiles, resolveActiveModel } from '@lib/ai/client';
 import { CodeEditor } from './CodeEditor';
 
 export function Workspace() {
@@ -65,6 +66,21 @@ export function Workspace() {
     setDirty(false);
   };
 
+  const retryGeneration = async () => {
+    const active = resolveActiveModel();
+    if (!active || !project) {
+      updateProject(projectId, { generationStatus: 'error', generationError: 'لا يوجد موديل نشط. أضف مزودًا واختر موديلًا من الإعدادات.' });
+      return;
+    }
+    updateProject(projectId, { generationStatus: 'running', generationError: undefined });
+    try {
+      const result = await generateProjectFiles(project, active.provider, active.model);
+      updateProject(projectId, { files: result.files, generationStatus: 'complete', generationSummary: result.summary, generationError: undefined, updatedAt: Date.now() });
+    } catch (cause) {
+      updateProject(projectId, { generationStatus: 'error', generationError: cause instanceof Error ? cause.message : 'تعذر توليد الملفات.' });
+    }
+  };
+
   const createFile = () => {
     const clean = newPath.trim().replace(/\\/g, '/').replace(/^\/+/, '');
     if (!clean || clean.split('/').some(part => part === '..' || !part)) return;
@@ -98,7 +114,8 @@ export function Workspace() {
     </div>
 
     {project.generationStatus === 'running' && <div role="status" className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm"><LoaderCircle className="animate-spin text-primary" size={18}/><div><p className="font-medium">الذكاء الاصطناعي بيحلل المشروع وبيجهز الملفات</p><p className="text-xs text-muted-foreground">قد يستغرق ذلك بعض الوقت حسب المزود والموديل.</p></div></div>}
-    {project.generationStatus === 'error' && <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm"><AlertCircle className="mt-0.5 shrink-0 text-destructive" size={18}/><div><p className="font-medium">تعذر توليد ملفات المشروع</p><p className="mt-1 text-muted-foreground">{project.generationError || 'حدث خطأ غير معروف.'}</p></div></div>}
+    {project.generationStatus === 'error' && <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm"><AlertCircle className="mt-0.5 shrink-0 text-destructive" size={18}/><div><p className="font-medium">تعذر توليد ملفات المشروع</p><p className="mt-1 text-muted-foreground">{project.generationError || 'حدث خطأ غير معروف.'}</p><Button className="mt-3" variant="outline" size="sm" onClick={() => void retryGeneration()}>إعادة محاولة التوليد</Button></div></div>}
+    {project.generationStatus === 'complete' && project.generationSummary && <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm"><p className="mb-1 font-semibold">ملخص تحليل المشروع</p><p className="whitespace-pre-wrap text-muted-foreground">{project.generationSummary}</p></div>}
     {(!project.generationStatus || project.generationStatus === 'idle') && <div className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">المشروع محفوظ محليًا. لبدء التوليد التلقائي، أضف مزودًا واختر موديلًا من الإعدادات ثم أنشئ مشروعًا جديدًا.</div>}
 
     <div className="grid min-h-[68vh] overflow-hidden rounded-2xl border border-border lg:grid-cols-[260px_1fr]">

@@ -72,7 +72,7 @@ export function NewProjectDialog() {
 
       if (active) {
         void generateProjectFiles(project, active.provider, active.model).then(result => {
-          updateProject(id, { files: result.files, generationStatus: 'complete', generationError: undefined, updatedAt: Date.now() });
+          updateProject(id, { files: result.files, generationStatus: 'complete', generationSummary: result.summary, generationError: undefined, updatedAt: Date.now() });
         }).catch(cause => {
           updateProject(id, {
             generationStatus: 'error',

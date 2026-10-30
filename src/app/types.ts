@@ -13,6 +13,7 @@ export interface Project {
   plan?: ProjectPlan;
   generationStatus?: 'idle' | 'running' | 'complete' | 'error';
   generationError?: string;
+  generationSummary?: string;
   createdAt: number;
   updatedAt: number;
   importedFrom?: string;
