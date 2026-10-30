@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, implementation/phase-0-audit-and-android-hardening]
+    branches: [main, develop, implementation/phase-0-audit-and-android-hardening, repair/full-project-hardening]
   pull_request:
     branches: [main, develop]
 
@@ -22,5 +22,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Type check
         run: npm run typecheck
+      - name: Run regression tests
+        run: npm run test:run
       - name: Build
         run: npm run build
