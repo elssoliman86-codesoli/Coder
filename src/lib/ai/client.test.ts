@@ -10,7 +10,7 @@ vi.mock('@app/store', () => ({
 function setProviders(providers: Provider[]) {
   vi.mocked(useStore.getState).mockReturnValue({
     providers
-  } as ReturnType<typeof useStore.getState>);
+  } as unknown as ReturnType<typeof useStore.getState>);
 }
 
 function makeModel(providerId: string, id = 'test-model'): Model {
