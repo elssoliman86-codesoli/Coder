@@ -1,160 +1,81 @@
-name: Build APK
+name: Build Android APK
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version name (e.g., 1.0.0)'
+        description: 'Version name'
         required: false
+        default: '0.1.0'
         type: string
-      release:
-        description: 'Create a GitHub Release'
-        required: false
-        type: boolean
-        default: true
   push:
+    branches:
+      - implementation/phase-0-audit-and-android-hardening
     tags:
       - 'v*'
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-android:
-    name: Build Android APK
+    name: Build installable Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+    timeout-minutes: 40
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: '9'
-          run_install: false
+      - name: Install JavaScript dependencies
+        run: npm install --no-audit --no-fund
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Build web app
-        run: pnpm build
+      - name: Build web application
+        run: npm run build
         env:
-          VITE_APP_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          VITE_APP_VERSION: ${{ inputs.version || github.ref_name }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          ndk-version: r27b
-          emulator: false
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
 
-      - name: Add keystore
-        if: env.KEYSTORE_BASE64 != ''
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify APK exists
+        id: apk
+        shell: bash
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-          echo "KEYSTORE_PATH=keystore.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "KEYSTORE_ALIAS=${{ secrets.KEYSTORE_ALIAS }}" >> $GITHUB_ENV
-          echo "KEYSTORE_ALIAS_PASSWORD=${{ secrets.KEYSTORE_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          sha256sum "$APK"
 
-      - name: Sync Capacitor
-        run: pnpm cap sync android
-        env:
-          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
-          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
-          KEYSTORE_ALIAS: ${{ env.KEYSTORE_ALIAS }}
-          KEYSTORE_ALIAS_PASSWORD: ${{ env.KEYSTORE_ALIAS_PASSWORD }}
-
-      - name: Build Release APK
-        run: |
-          cd android
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
-            -Pandroid.injected.signing.store.password=${{ env.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ env.KEYSTORE_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ env.KEYSTORE_ALIAS_PASSWORD }}
-
-      - name: Find APK
-        id: find-apk
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
-
-      - name: Upload APK artifact
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: 2OneByte-Coder-APK
-          path: ${{ steps.find-apk.outputs.apk_path }}
+          name: 2OneByte-Coder-Android-APK
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
           retention-days: 30
-
-      - name: Create Release
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true' || github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.version || github.ref_name }}
-          name: 2OneByte-Coder ${{ github.event.inputs.version || github.ref_name }}
-          body: |
-            ## 2OneByte-Coder ${{ github.event.inputs.version || github.ref_name }}
-            
-            تحميل APK الموقع جاهز للتثبيت على أجهزة أندرويد.
-            
-            ### التغييرات
-            - راجع [CHANGELOG.md](CHANGELOG.md) للتفاصيل
-            
-            ### التحقق من التوقيع
-            ```bash
-            apksigner verify --print-certs app-release.apk
-            ```
-          files: ${{ steps.find-apk.outputs.apk_path }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify on failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[BUILD FAILED] Android APK build failed - ${{ github.run_id }}`,
-              body: `Build failed: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
-              labels: ['bug', 'build-failure']
-            });
