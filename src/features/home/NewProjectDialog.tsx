@@ -106,7 +106,7 @@ export function NewProjectDialog() {
       {!providers.length && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600">لم تضف مزود ذكاء اصطناعي بعد. سيتم إنشاء مساحة عمل محلية فقط؛ أضف مزودًا وموديلًا من الإعدادات لتفعيل التوليد.</p>}
       {providers.length > 0 && !activeModelAvailable && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600">لا يوجد مزود وموديل جاهز حاليًا. تأكد من حفظ مفتاح API واختيار موديل صالح من الإعدادات. يمكنك إنشاء مساحة عمل محلية الآن وبدء التحليل لاحقًا.</p>}
       {error && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="w-full" disabled={!draft.name.trim() || busy} loading={busy}{activeModelAvailable ? 'إنشاء المشروع وبدء التحليل' : 'إنشاء مساحة العمل'}</Button>
+      <Button type="submit" className="w-full" disabled={!draft.name.trim() || busy} loading={busy}>{activeModelAvailable ? 'إنشاء المشروع وبدء التحليل' : 'إنشاء مساحة العمل'}</Button>
     </form>
   </section>;
 }
