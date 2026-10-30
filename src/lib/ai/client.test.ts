@@ -41,7 +41,7 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
 
 afterEach(() => {
   vi.mocked(useStore.getState).mockReset();
-  vi.mocked(useStore.getState).mockReturnValue({ providers: [] } as ReturnType<typeof useStore.getState>);
+  vi.mocked(useStore.getState).mockReturnValue({ providers: [] } as unknown as ReturnType<typeof useStore.getState>);
 });
 
 describe('resolveActiveModel', () => {
