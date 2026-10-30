@@ -64,7 +64,8 @@ jobs:
               exit 0
             fi
             echo "Android SDK package installation failed (attempt $attempt/3); clearing incomplete NDK download before retry."
-            rm -rf "$ANDROID_SDK_ROOT/ndk/27.0.12077973" "$ANDROID_SDK_ROOT/.temp"/*
+            SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+            rm -rf "$SDK_ROOT/ndk/27.0.12077973" "$SDK_ROOT/.temp"/*
             sleep 8
           done
           exit 1
