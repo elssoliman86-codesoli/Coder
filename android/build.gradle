@@ -9,7 +9,7 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.4.0'
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
-        
+
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
     }
@@ -25,6 +25,24 @@ allprojects {
         google()
         mavenCentral()
     }
+}
+
+// Capacitor configuration
+ext {
+    compileSdkVersion = 34
+    minSdkVersion = 24
+    targetSdkVersion = 34
+    androidxAppCompatVersion = '1.6.1'
+    androidxCoreKtxVersion = '1.12.0'
+    androidxActivityVersion = '1.8.2'
+    androidxFragmentVersion = '1.6.2'
+    androidxSwipeRefreshLayoutVersion = '1.1.0'
+    androidxConstraintLayoutVersion = '2.1.4'
+    googlePlayServicesAuthVersion = '20.7.0'
+    junitVersion = '4.13.2'
+    espressoVersion = '3.5.1'
+    androidxTestVersion = '1.5.2'
+    androidxTestRulesVersion = '1.5.0'
 }
 
 tasks.register('clean', Delete) {
