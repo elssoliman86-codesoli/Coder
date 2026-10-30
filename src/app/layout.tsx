@@ -13,7 +13,12 @@ export function Layout() {
   useEffect(() => {
     document.documentElement.setAttribute('dir', settings.language === 'ar' ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', settings.language);
-    document.documentElement.classList.toggle('light', settings.theme === 'light');
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    const applyTheme = () => document.documentElement.classList.toggle('light', settings.theme === 'light' || (settings.theme === 'system' && media.matches));
+    applyTheme();
+    if (settings.theme !== 'system') return;
+    media.addEventListener('change', applyTheme);
+    return () => media.removeEventListener('change', applyTheme);
   }, [settings.theme, settings.language]);
 
   const isWorkspace = location.pathname.startsWith('/workspace');
