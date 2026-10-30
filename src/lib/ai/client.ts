@@ -165,10 +165,23 @@ export function resolveActiveModel(): { provider: Provider; model: Model } | nul
 function safeGeneratedPath(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const path = raw.trim().replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!path || path.startsWith('/') || /^[a-z]:/i.test(path)) return null;
+  if (!path || path.length > 240 || path.startsWith('/') || /^[a-z]:/i.test(path) || path.includes('\\0')) return null;
+
   const parts = path.split('/');
-  if (parts.some(part => !part || part === '.' || part === '..' || part === '.git' || part === 'node_modules')) return null;
-  if (parts[parts.length - 1] === '.env' || parts[parts.length - 1].startsWith('.env.')) return null;
+  const reservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+  const invalidCharacters = /[<>:"|?*\u0000-\u001f]/;
+  if (parts.some(part =>
+    !part ||
+    part === '.' ||
+    part === '..' ||
+    part.toLowerCase() === '.git' ||
+    part.toLowerCase() === 'node_modules' ||
+    /^\.env(?:\.|$)/i.test(part) ||
+    invalidCharacters.test(part) ||
+    /[. ]$/.test(part) ||
+    reservedNames.test(part)
+  )) return null;
+
   return path;
 }
 
@@ -210,9 +223,9 @@ export async function generateProjectFiles(
     if (!entry || typeof entry !== 'object') continue;
     const item = entry as { path?: unknown; content?: unknown };
     const path = safeGeneratedPath(item.path);
-    if (!path || typeof item.content !== 'string' || seen.has(path)) continue;
+    if (!path || typeof item.content !== 'string' || seen.has(path.toLowerCase())) continue;
     const content = item.content.slice(0, 80000);
-    seen.add(path);
+    seen.add(path.toLowerCase());
     files.push({
       path,
       content,
