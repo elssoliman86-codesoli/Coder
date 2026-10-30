@@ -57,7 +57,17 @@ jobs:
           packages: platform-tools
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"; then
+              exit 0
+            fi
+            echo "Android SDK package installation failed (attempt $attempt/3); clearing incomplete NDK download before retry."
+            rm -rf "$ANDROID_SDK_ROOT/ndk/27.0.12077973" "$ANDROID_SDK_ROOT/.temp"/*
+            sleep 8
+          done
+          exit 1
 
       - name: Sync Capacitor Android project
         run: npx cap sync android
