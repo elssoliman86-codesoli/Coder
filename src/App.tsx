@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useStore } from '@app/store';
+import { get, set } from 'idb-keyval';
 import { Layout } from '@app/layout';
 import { LoadingScreen } from '@components/ui/loading-screen';
 
@@ -17,6 +18,12 @@ function App() {
   useEffect(() => {
     let active = true;
     void (async () => {
+      // One-time migration: copy existing device-local localStorage data into IndexedDB.
+      const stored = await get<string>('2onebyte-coder-storage');
+      if (!stored) {
+        const legacy = localStorage.getItem('2onebyte-coder-storage');
+        if (legacy) await set('2onebyte-coder-storage', legacy);
+      }
       // Hydrate the local IndexedDB before initializing skills or rendering persisted workspace state.
       await useStore.persist.rehydrate();
       if (active) await initialize();
