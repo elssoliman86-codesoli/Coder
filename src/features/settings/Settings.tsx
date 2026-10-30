@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { nanoid } from 'nanoid';
+import { del } from 'idb-keyval';
 import { KeyRound, Plus, RefreshCw, Server, Trash2, Cpu } from 'lucide-react';
 import { useSettings, useStore, useProviders } from '@app/store';
 import { Button } from '@components/ui/button';
@@ -160,6 +161,6 @@ export function Settings() {
         </div>)}</div>
       }
     </div>
-    <div className="rounded-2xl border border-border bg-card p-5"><h2 className="font-semibold">البيانات المحلية</h2><p className="my-2 text-sm text-muted-foreground">إعادة الضبط تحذف المشاريع والمزودين والإعدادات المحفوظة على هذا الجهاز.</p><Button variant="outline" onClick={()=>{if(window.confirm('هل تريد حذف كل بيانات التطبيق المحلية؟ لا يمكن التراجع.')){localStorage.removeItem('2onebyte-coder-storage');window.location.reload();}}}>إعادة ضبط بيانات التطبيق</Button></div>
+    <div className="rounded-2xl border border-border bg-card p-5"><h2 className="font-semibold">البيانات المحلية</h2><p className="my-2 text-sm text-muted-foreground">إعادة الضبط تحذف المشاريع والمزودين والإعدادات المحفوظة على هذا الجهاز.</p><Button variant="outline" onClick={async()=>{if(window.confirm('هل تريد حذف كل بيانات التطبيق المحلية؟ لا يمكن التراجع.')){await del('2onebyte-coder-storage');localStorage.removeItem('2onebyte-coder-storage');sessionStorage.removeItem('2onebyte-new-project-draft');window.location.reload();}}}>إعادة ضبط بيانات التطبيق</Button></div>
   </section>;
 }
