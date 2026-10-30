@@ -32,6 +32,7 @@ export function Settings() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [keySaveState, setKeySaveState] = useState<Record<string, 'saving' | 'saved' | 'error'>>({});
 
   const choosePreset = (value: string) => {
     setProviderType(value);
@@ -141,7 +142,41 @@ export function Settings() {
             <div><div className="flex items-center gap-2 font-semibold"><Server size={16}/>{provider.name}{provider.default && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">افتراضي</span>}</div><p className="mt-1 break-all text-xs text-muted-foreground" dir="ltr">{provider.baseUrl}</p></div>
             <div className="flex items-center gap-1"><Button variant="outline" size="sm" onClick={() => setDefaultProvider(provider.id)} disabled={provider.default}>{provider.default ? 'المزود الافتراضي' : 'جعله افتراضيًا'}</Button><Button variant="ghost" size="icon" onClick={() => void removeProvider(provider.id)} aria-label="حذف المزود"><Trash2 size={16}/></Button></div>
           </div>
-          <label className="block space-y-1 text-xs"><span className="flex items-center gap-1"><KeyRound size={13}/> مفتاح API (يُحفظ محليًا)</span><input className="input-field" type="password" autoComplete="off" value={provider.apiKey ?? ''} onChange={event => { const value = event.target.value; updateProvider(provider.id, { apiKey: value }); void saveProviderSecret(provider.id, value).catch(cause => setError(cause instanceof Error ? cause.message : 'تعذر حفظ المفتاح محليًا.')); }} placeholder="مفتاح هذا المزود" dir="ltr"/></label>
+          <label className="block space-y-1 text-xs">
+            <span className="flex items-center gap-1"><KeyRound size={13}/> مفتاح API (يُحفظ محليًا)</span>
+            <input
+              className="input-field"
+              type="password"
+              autoComplete="new-password"
+              aria-label={'مفتاح API لمزود ' + provider.name}
+              value={provider.apiKey ?? ''}
+              onChange={event => {
+                const value = event.target.value;
+                updateProvider(provider.id, { apiKey: value });
+                setKeySaveState(current => ({ ...current, [provider.id]: 'saving' }));
+                void saveProviderSecret(provider.id, value).then(() => {
+                  setKeySaveState(current => ({ ...current, [provider.id]: 'saved' }));
+                  setError('');
+                }).catch(cause => {
+                  setKeySaveState(current => ({ ...current, [provider.id]: 'error' }));
+                  setError(cause instanceof Error ? cause.message : 'تعذر حفظ المفتاح محليًا.');
+                });
+              }}
+              placeholder="مفتاح هذا المزود"
+              dir="ltr"
+            />
+            <span role="status" className={keySaveState[provider.id] === 'error' ? 'text-destructive' : 'text-muted-foreground'}>
+              {keySaveState[provider.id] === 'saving'
+                ? 'جارٍ حفظ المفتاح...'
+                : keySaveState[provider.id] === 'saved'
+                  ? 'تم حفظ المفتاح على هذا الجهاز.'
+                  : keySaveState[provider.id] === 'error'
+                    ? 'تعذر حفظ المفتاح؛ لن يتم ضمان بقائه بعد إعادة التشغيل.'
+                    : provider.apiKey
+                      ? 'المفتاح متاح في الجلسة الحالية.'
+                      : 'لم يتم إدخال مفتاح لهذا المزود.'}
+            </span>
+          </label>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <label className="space-y-1 text-xs"><span>الموديل النشط</span><select className="input-field" value={provider.selectedModelId ?? ''} onChange={event => selectModel(provider.id, event.target.value)} disabled={!provider.models?.length}><option value="">اختر موديلًا</option>{(provider.models ?? []).map(model => <option key={model.id} value={model.id}>{model.name}</option>)}</select></label>
             <Button className="self-end" variant="outline" size="sm" disabled={busyId === provider.id} onClick={() => void discoverModels(provider)}><RefreshCw size={14} className={busyId === provider.id ? 'animate-spin' : ''}/>{busyId === provider.id ? 'جاري الجلب' : 'جلب الموديلات'}</Button>
