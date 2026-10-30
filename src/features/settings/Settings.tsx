@@ -111,8 +111,13 @@ export function Settings() {
   };
 
   const removeProvider = async (providerId: string) => {
+    const removed = providers.find(provider => provider.id === providerId);
     await removeProviderSecret(providerId);
     deleteProvider(providerId);
+    if (removed?.default) {
+      const replacement = providers.find(provider => provider.id !== providerId);
+      if (replacement) updateProvider(replacement.id, { default: true });
+    }
   };
 
   return <section className="mx-auto max-w-4xl space-y-6">
