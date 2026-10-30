@@ -53,6 +53,12 @@
       ],
       "@components/*": [
         "src/components/*"
+      ],
+      "@lib/*": [
+        "src/lib/*"
+      ],
+      "@skills/*": [
+        "src/skills/*"
       ]
     }
   },
