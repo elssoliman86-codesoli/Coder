@@ -11,27 +11,39 @@ const Workspace = lazy(() => import('@features/workspace/Workspace').then(module
 const Settings = lazy(() => import('@features/settings/Settings').then(module => ({ default: module.Settings })));
 const NewProject = lazy(() => import('@features/home/NewProjectDialog').then(module => ({ default: module.NewProjectDialog })));
 
+let appPreparation: Promise<void> | null = null;
+
+function prepareAppData(): Promise<void> {
+  if (!appPreparation) {
+    appPreparation = (async () => {
+      const stored = await get<string>('2onebyte-coder-storage');
+      if (!stored) {
+        const legacy = localStorage.getItem('2onebyte-coder-storage');
+        if (legacy) await set('2onebyte-coder-storage', legacy);
+      }
+      await useStore.persist.rehydrate();
+      await restoreProviderSecrets();
+    })().catch(error => {
+      appPreparation = null;
+      throw error;
+    });
+  }
+  return appPreparation;
+}
+
 function App() {
   const initialize = useStore(state => state.initialize);
   const initialized = useStore(state => state.initialized);
 
   useEffect(() => {
     let active = true;
-    void (async () => {
-      try {
-        const stored = await get<string>('2onebyte-coder-storage');
-        if (!stored) {
-          const legacy = localStorage.getItem('2onebyte-coder-storage');
-          if (legacy) await set('2onebyte-coder-storage', legacy);
-        }
-        await useStore.persist.rehydrate();
-        await restoreProviderSecrets();
-        if (active) await initialize();
-      } catch (error) {
-        console.error('Application initialization failed', error);
-        if (active) await initialize();
-      }
-    })();
+    void prepareAppData()
+      .catch(error => {
+        console.error('Application data preparation failed', error);
+      })
+      .finally(() => {
+        if (active) void initialize();
+      });
     return () => { active = false; };
   }, [initialize]);
 
