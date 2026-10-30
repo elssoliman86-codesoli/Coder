@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, FileCode2, Save, Plus, FolderOpen } from 'lucide-react';
-import { nanoid } from 'nanoid';
 import { useStore } from '@app/store';
 import { Button } from '@components/ui/button';
 import { getLanguageFromPath } from '@lib/utils';
