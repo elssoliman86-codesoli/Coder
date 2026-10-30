@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@lib/utils';
 import { Button } from '@components/ui/button';
 import { Badge } from '@components/ui/badge';
@@ -59,7 +58,7 @@ export function Sidebar({
   isMobileOpen,
   onCloseMobile,
 }: SidebarProps) {
-  const pathname = usePathname();
+  const location = useLocation();
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     projects: true,
     recent: true,
@@ -67,6 +66,11 @@ export function Sidebar({
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const isActive = (href: string) => {
+    if (href === '/') return location.pathname === '/';
+    return location.pathname.startsWith(href);
   };
 
   return (
@@ -91,10 +95,10 @@ export function Sidebar({
       >
         {/* Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-border">
-          <Link href="/" className="flex items-center gap-2" onClick={onCloseMobile}>
+          <NavLink to="/" className="flex items-center gap-2" onClick={onCloseMobile}>
             <Code className="h-6 w-6 text-primary" aria-hidden="true" />
             <span className="font-bold text-lg">Coder</span>
-          </Link>
+          </NavLink>
           <button
             className="lg:hidden p-2 rounded-md hover:bg-accent"
             onClick={onCloseMobile}
@@ -107,23 +111,23 @@ export function Sidebar({
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1" role="navigation" aria-label="التنقل الرئيسي">
           {navigation.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            const active = isActive(item.href);
             return (
-              <Link
+              <NavLink
                 key={item.name}
-                href={item.href}
+                to={item.href}
                 onClick={onCloseMobile}
-                className={cn(
+                className={({ isActive: navActive }) => cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isActive
+                  navActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
-                aria-current={isActive ? 'page' : undefined}
+                aria-current={active ? 'page' : undefined}
               >
                 <item.icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
                 {item.name}
-              </Link>
+              </NavLink>
             );
           })}
         </nav>
@@ -220,22 +224,25 @@ export function Sidebar({
           </button>
 
           {expandedSections.recent && (
-            <div id="recent-list" className="space-y-1 mt-1" role="list" aria-label="المشاريع الحديثة">
+            <div id="recent-list" className="space-y-1 mt-2" role="list" aria-label="المشاريع الحديثة">
               {projects.slice(0, 5).map((project) => (
                 <button
-                  key={`recent-${project.id}`}
+                  key={project.id}
                   onClick={() => {
                     onSelectProject(project.id);
                     onCloseMobile();
                   }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-accent hover:text-foreground flex items-center gap-2"
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2',
+                    currentProjectId === project.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  )}
                   role="listitem"
+                  aria-current={currentProjectId === project.id ? 'true' : 'false'}
                 >
-                  <FolderOpen className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                  <History className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="truncate flex-1">{project.name}</span>
-                  <span className="text-[10px] text-muted-foreground/50">
-                    {new Date(project.lastOpened).toLocaleDateString('ar-EG')}
-                  </span>
                 </button>
               ))}
             </div>
@@ -244,17 +251,10 @@ export function Sidebar({
 
         {/* Footer */}
         <div className="p-3 border-t border-border">
-          <Link
-            href="https://github.com/elssoliman86-codesoli/Coder"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            onClick={onCloseMobile}
-          >
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Coder v1.0.0</span>
             <Globe className="h-4 w-4" aria-hidden="true" />
-            <span>GitHub</span>
-            <ChevronRight className="h-3 w-3 ml-auto" aria-hidden="true" />
-          </Link>
+          </div>
         </div>
       </aside>
     </>
