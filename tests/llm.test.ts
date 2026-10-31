@@ -123,3 +123,26 @@ test('streamChat honours abort', async () => {
   ac.abort();
   await assert.rejects(streamChat({ baseUrl: 'u', apiKey: '' }, { model: 'm', messages: [], signal: ac.signal }, { fetch: (async () => new Response('')) as any }), /الإلغاء/);
 });
+
+import { flattenMessages } from '../src/llm/client';
+test('flattenMessages folds system into the first user turn and alternates roles', () => {
+  const out = flattenMessages([
+    { role: 'system', content: 'S' }, { role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }, { role: 'user', content: 'd' },
+  ]);
+  assert.deepEqual(out.map((m) => m.role), ['user', 'assistant', 'user']);
+  assert.equal(out[0].content, 'S\n\na');
+  assert.equal(out[2].content, 'c\n\nd');
+});
+
+test('streamChat retries once with flattened messages after a roles-alternate 400', async () => {
+  const bodies: any[] = [];
+  const f = (async (_u: string, init: any) => {
+    const b = JSON.parse(init.body); bodies.push(b);
+    if (b.messages.some((m: any) => m.role === 'system')) return new Response(JSON.stringify({ error: { message: 'Conversation roles must alternate user/assistant/user/assistant/...' } }), { status: 400 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  const out = await streamChat({ baseUrl: 'http://x/v1', apiKey: '' }, { model: 'm-flat', messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'hi' }] }, { fetch: f, sleep: async () => undefined });
+  assert.equal(out, 'ok');
+  assert.equal(bodies.length, 2);
+  assert.deepEqual(bodies[1].messages.map((m: any) => m.role), ['user']);
+});

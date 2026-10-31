@@ -155,12 +155,38 @@ export class SSEDecoder {
   }
 }
 
+/**
+ * Some models (Gemma, Mistral-family, a few hosted ones) reject the `system` role or demand strict
+ * user/assistant alternation. This folds the system prompt into the first user turn and merges neighbours.
+ */
+export function flattenMessages(messages: ChatMessage[]): ChatMessage[] {
+  const sys = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+  const rest = messages.filter((m) => m.role !== 'system');
+  const out: ChatMessage[] = [];
+  for (const m of rest) {
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content += '\n\n' + m.content;
+    else out.push({ ...m });
+  }
+  if (sys) {
+    if (out[0]?.role === 'user') out[0].content = sys + '\n\n' + out[0].content;
+    else out.unshift({ role: 'user', content: sys });
+  }
+  if (out.length && out[0].role !== 'user') out.unshift({ role: 'user', content: '.' });
+  return out;
+}
+
+const NEEDS_FLAT = /alternate|system (role|message)|roles? must|first message must|only (user|assistant)/i;
+/** Endpoint+model pairs that need flattened messages (learned at runtime). */
+const flatModels = new Set<string>();
+
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {}): Promise<string> {
   const f = deps.fetch ?? smartFetch;
   const wait = deps.sleep ?? sleep;
   const maxAttempts = 4;
+  const flatKey = `${ep.baseUrl}|${opts.model}`;
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (opts.signal?.aborted) throw new Aborted();
@@ -180,7 +206,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
         signal: idle.signal,
         body: JSON.stringify({
           model: opts.model,
-          messages: opts.messages,
+          messages: flatModels.has(flatKey) ? flattenMessages(opts.messages) : opts.messages,
           temperature: opts.temperature ?? 0.2,
           ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
           stream: true,
@@ -188,6 +214,10 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
       });
       if (!res.ok) {
         const err = new HttpError(res.status, `فشل الطلب (${res.status}): ${await errorText(res)}`);
+        if (res.status === 400 && !flatModels.has(flatKey) && NEEDS_FLAT.test(err.message)) {
+          flatModels.add(flatKey); // retry at once with the system prompt folded into the user turn
+          continue;
+        }
         if (RETRYABLE.has(res.status) && attempt < maxAttempts - 1) {
           lastErr = err;
           const ra = Number(res.headers.get('retry-after'));
