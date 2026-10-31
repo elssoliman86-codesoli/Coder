@@ -69,7 +69,8 @@ function App(){
   useEffect(()=>{try{localStorage.setItem('onebyte.active',active.id);localStorage.setItem(`onebyte.files.${active.id}`,JSON.stringify(files))}catch{}},[active,files]);
 
   async function loadModels(){
-    const baseUrl=provider.baseUrl.trim().replace(/\\/+$/,'');
+    let baseUrl=provider.baseUrl.trim();
+    while(baseUrl.endsWith('/'))baseUrl=baseUrl.slice(0,-1);
     const apiKey=provider.apiKey.trim();
     if(!baseUrl||!apiKey){flash('Add Base URL and API key first.');return;}
     setModelsLoading(true);
