@@ -7,7 +7,7 @@ import { BUILTIN_SKILLS } from './skills/builtin';
 import { Aborted, errMsg, uid } from './lib/util';
 import type { Role, Skill } from './types';
 import { explainHttpError, streamChat, type ChatMessage } from './llm/client';
-import { applyEdit, generateProject, planProject } from './agents/pipeline';
+import { applyEdit, generateMock, generateProject, planProject } from './agents/pipeline';
 
 export interface LogLine {
   t: number;
@@ -113,6 +113,10 @@ export async function startProject(id: string) {
     if (!ctx.getProject().plan) await planProject(ctx);
     await generateProject(ctx);
   });
+}
+
+export async function generateMockPreview(id: string) {
+  await runJob(id, 'mock', async (ctx) => { await generateMock(ctx); });
 }
 
 // ---------- edit queue ----------

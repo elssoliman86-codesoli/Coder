@@ -13,6 +13,7 @@ import { PublishModal, DetailsModal } from './Publish';
 import { PlanModal } from './PlanView';
 import { ReviewPopover, useReview } from './Review';
 import { basename } from '../../lib/lang';
+import { detectKind } from '../../lib/preview-kind';
 
 export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: () => void; onOpenSettings: () => void }) {
   const t = useT();
@@ -52,6 +53,9 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   const [full, setFull] = useState(false);
   useEscape(() => setFull(false), full);
   const preview = useRef<PreviewHandle>(null);
+  const kind = useMemo(() => (project ? detectKind(project.files, project.type, project.primaryLanguage).kind : 'none'), [project?.files, project?.type, project?.primaryLanguage]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The design-review loop only makes sense for previews of the real UI (not terminals, notices or AI simulations).
+  const reviewable = kind === 'html' || kind === 'react' || kind === 'next';
   const review = useReview(id, preview);
 
   const opts = useMemo(() => modelOptions(providers), [providers]);
@@ -75,7 +79,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   useEffect(() => {
     const was = wasBusy.current;
     wasBusy.current = !!busy;
-    if (was && !busy && showPreview && project?.status === 'ready' && review.phase !== 'fixing') {
+    if (was && !busy && showPreview && reviewable && project?.status === 'ready' && review.phase !== 'fixing') {
       setTimeout(() => void review.fixLoop().catch((e) => toast(errMsg(e), 'error')), 0);
     }
   }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -97,6 +101,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
     closeSidebar();
     if (showPreview) { setShowPreview(false); return; }
     setShowPreview(true);
+    if (!reviewable) return;
     setTimeout(() => void review.fixLoop().catch((e) => toast(errMsg(e), 'error')), 50);
   };
 

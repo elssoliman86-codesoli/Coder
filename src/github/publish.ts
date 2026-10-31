@@ -1,8 +1,10 @@
 import type { Project, ProjectFile, PublishInfo } from '../types';
+import { securityScan } from '../agents/analysis';
 import { runExpert, type ExpertReport, type RunCtx } from '../agents/pipeline';
 import { GithubClient, type RunInfo } from './client';
 import { GITIGNORE, MIT_LICENSE, fallbackReadme, workflowsFor } from './workflows';
 import { slugify } from '../lib/util';
+import { diffAgainstImport, gitBlobSha } from './import';
 import { throwIfAborted } from '../lib/util';
 
 export class PublishBlocked extends Error {
@@ -20,6 +22,8 @@ export class PublishFailed extends Error {
 export interface PublishOptions {
   repoName: string;
   isPrivate: boolean;
+  /** Linked (imported) projects: the branch to commit to. */
+  branch?: string;
   step?: (label: string) => void;
 }
 
@@ -53,6 +57,8 @@ export function releaseFiles(p: Project, readme?: string): ProjectFile[] {
 export async function publishProject(ctx: RunCtx, gh: GithubClient, opts: PublishOptions): Promise<PublishInfo> {
   const step = opts.step ?? (() => {});
   const log = ctx.log;
+
+  if (ctx.getProject().github) return publishLinked(ctx, gh, opts);
 
   step('expert');
   const report = await runExpert(ctx);
@@ -146,5 +152,33 @@ export async function publishProject(ctx: RunCtx, gh: GithubClient, opts: Publis
     publishedAt: Date.now(),
   };
   ctx.patch((x) => { x.publish = info; });
+  return info;
+}
+
+/** Publishing a project that was imported from GitHub: commit only the changes to the chosen branch. */
+async function publishLinked(ctx: RunCtx, gh: GithubClient, opts: PublishOptions): Promise<PublishInfo> {
+  const step = opts.step ?? (() => {});
+  const p = ctx.getProject();
+  const link = p.github!;
+  const [owner, repo] = link.fullName.split('/');
+  const branch = (opts.branch ?? link.branch).trim() || link.branch;
+  step('github-user');
+  await gh.user();
+  const changes = await diffAgainstImport(p.files, link);
+  if (changes.length === 0) throw new PublishFailed('مفيش تعديلات جديدة لرفعها');
+  // No 10/10 gate for someone else's codebase, but never push leaked secrets.
+  const changed = new Set(changes.filter((c) => c.content !== null).map((c) => c.path));
+  const leaks = securityScan(p.files.filter((f) => changed.has(f.path)), p.type).filter((f) => f.severity === 'critical');
+  if (leaks.length) throw new PublishFailed(`النشر متوقف: ${leaks.slice(0, 3).map((l) => `${l.file}: ${l.message}`).join(' | ')}`);
+  step('push');
+  const msg = `Update from 2OneByte-Coder: ${changes.length} file(s)`;
+  const sha = await gh.pushChanges(owner, repo, branch, link.baseBranch, changes, msg);
+  ctx.log(`تم رفع ${changes.length} تعديل على الفرع ${branch} (commit ${sha.slice(0, 7)})`, 'ok');
+  const shas: Record<string, string> = {};
+  for (const f of p.files) shas[f.path] = await gitBlobSha(f.content);
+  step('details');
+  const url = branch === link.baseBranch ? link.htmlUrl : `${link.htmlUrl}/tree/${branch}`;
+  const info: PublishInfo = { repoUrl: url, repoFullName: link.fullName, version: `commit ${sha.slice(0, 7)}`, score: 0, report: `${changes.length} ملف اتعدّل على ${branch}`, publishedAt: Date.now() };
+  ctx.patch((x) => { x.github = { ...link, branch, shas }; x.publish = info; });
   return info;
 }

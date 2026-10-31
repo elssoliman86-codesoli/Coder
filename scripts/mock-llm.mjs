@@ -46,6 +46,7 @@ document.getElementById('clear').addEventListener('click', () => { list.textCont
 function reply(messages) {
   const sys = String(messages[0]?.content ?? '');
   const user = String(messages.at(-1)?.content ?? '');
+  if (sys.includes('Preview Designer')) return '```html\n<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;font-family:sans-serif"><main style="max-width:420px;margin:0 auto;padding:24px"><h1>Mock Phone</h1><button style="min-height:44px;padding:0 16px">Open</button></main></body></html>\n```';
   if (sys.includes('Plan Reviewer')) return 'PLAN_OK';
   if (sys.includes('You are the Planner')) return JSON.stringify(PLAN);
   if (sys.includes('You only write code files')) {

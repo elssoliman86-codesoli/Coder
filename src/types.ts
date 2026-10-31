@@ -86,6 +86,21 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
   reviewCycles: number;
+  /** Set when the project was imported from a GitHub repository. */
+  github?: GithubLink;
+  /** AI-written visual simulation, used to preview apps that cannot run in the browser (native Android, desktop, Flutter…). */
+  mock?: { html: string; at: number };
+}
+
+export interface GithubLink {
+  fullName: string;
+  htmlUrl: string;
+  /** Branch the project was imported from. */
+  baseBranch: string;
+  /** Branch the next publish commits to. */
+  branch: string;
+  /** git blob sha of every imported text file, used to push only what changed (and never touch binaries). */
+  shas: Record<string, string>;
 }
 
 export interface ModelInfo {

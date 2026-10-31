@@ -277,6 +277,7 @@ export const PROVIDER_PRESETS: { id: string; label: string; baseUrl: string }[] 
   { id: 'together', label: 'Together AI', baseUrl: 'https://api.together.xyz/v1' },
   { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1' },
   { id: 'gemini', label: 'Google Gemini (OpenAI-compatible)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { id: 'nvidia', label: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1' },
   { id: 'ollama', label: 'Ollama (local)', baseUrl: 'http://localhost:11434/v1' },
   { id: 'custom', label: 'Custom', baseUrl: '' },
 ];

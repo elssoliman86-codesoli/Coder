@@ -5,6 +5,10 @@ import { buildReactPreviewHtml } from '../../lib/react-preview';
 import { detectKind, type KindInfo } from '../../lib/preview-kind';
 import { runPython, runRemote, type Job } from '../../lib/runners';
 import { app } from '../../storage/store';
+import { injectObserver } from '../../agents/observer';
+import { generateMockPreview, useRuntime } from '../../runtime';
+import { toast } from '../../components/ui';
+import { errMsg } from '../../lib/util';
 import { mergeIssues, type ObservedIssue } from '../../agents/observer';
 import { Icon, ProgressRing } from '../../components/ui';
 
@@ -31,12 +35,15 @@ interface Props {
   onToggleFull?: () => void;
 }
 
+const MOCK_INFO: KindInfo = { kind: 'mock', label: 'محاكاة مرئية', note: 'محاكاة تفاعلية مرسومة من الكود — مش تشغيل حقيقي للتطبيق.' };
+
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, ref) {
   const { project } = props;
   const info = useMemo(() => detectKind(project.files, project.type, project.primaryLanguage), [project.files, project.type, project.primaryLanguage]);
   if (info.kind === 'html' || info.kind === 'react' || info.kind === 'next') return <WebPreview ref={ref} {...props} info={info} />;
   if (info.kind === 'python' || info.kind === 'node' || info.kind === 'remote') return <TerminalPreview project={project} info={info} onClose={props.onClose} full={props.full} onToggleFull={props.onToggleFull} />;
-  return <NoticePreview info={info} onClose={props.onClose} full={props.full} onToggleFull={props.onToggleFull} />;
+  if (project.mock) return <WebPreview ref={ref} {...props} info={MOCK_INFO} mockHtml={project.mock.html} />;
+  return <NoticePreview project={project} info={info} onClose={props.onClose} full={props.full} onToggleFull={props.onToggleFull} />;
 });
 
 function FullButton({ full, onToggle }: { full?: boolean; onToggle?: () => void }) {
@@ -44,16 +51,27 @@ function FullButton({ full, onToggle }: { full?: boolean; onToggle?: () => void 
   return <button className="icon-btn" aria-label={full ? 'exit fullscreen' : 'fullscreen'} aria-pressed={!!full} onClick={onToggle} data-testid="fullscreen-btn"><Icon name={full ? 'shrink' : 'expand'} size={16} /></button>;
 }
 
-function NoticePreview({ info, onClose, full, onToggleFull }: { info: KindInfo; onClose: () => void; full?: boolean; onToggleFull?: () => void }) {
+function NoticePreview({ project, info, onClose, full, onToggleFull }: { project: Project; info: KindInfo; onClose: () => void; full?: boolean; onToggleFull?: () => void }) {
+  const busy = useRuntime((r) => r.busy[project.id] ?? null);
+  const draft = useRuntime((r) => r.drafts[project.id]?.['preview-simulation.html']);
+  const generating = busy === 'mock';
   return (
     <div className="preview" data-testid="preview">
       <div className="preview-bar"><strong>Preview</strong><span className="badge">{info.label}</span><span className="spacer" /><FullButton full={full} onToggle={onToggleFull} /><button className="icon-btn" aria-label="close preview" onClick={onClose}><Icon name="close" size={18} /></button></div>
-      <div className="preview-stage"><p className="muted center" style={{ maxWidth: 520, padding: 16 }} data-testid="preview-note">{info.note}</p></div>
+      <div className="preview-stage" style={{ flexDirection: 'column', gap: 12 }}>
+        <p className="muted center" style={{ maxWidth: 560, padding: 16 }} data-testid="preview-note">{info.note}</p>
+        {project.files.length > 0 && (
+          <button className="btn primary" disabled={!!busy} onClick={() => void generateMockPreview(project.id).catch((e) => toast(errMsg(e), 'error'))} data-testid="make-mock">
+            {generating ? <><span className="spinner" /> بيرسم المحاكاة…</> : 'إنشاء معاينة مرئية'}
+          </button>
+        )}
+        {generating && draft && <pre className="log mono small" dir="ltr" style={{ maxWidth: '90%', maxHeight: 140 }}>{draft.slice(-400)}</pre>}
+      </div>
     </div>
   );
 }
 
-const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo }>(function WebPreview({ project, onClose, onWindowEnd, disabled, info, full, onToggleFull }, ref) {
+const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo; mockHtml?: string }>(function WebPreview({ project, onClose, onWindowEnd, disabled, info, full, onToggleFull, mockHtml }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [nonce, setNonce] = useState(0);
   const [device, setDevice] = useState<'phone' | 'tablet' | 'desktop'>(project.type === 'apk' ? 'phone' : 'desktop');
@@ -67,8 +85,8 @@ const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo }
   const filesRef = useRef(project.files);
   filesRef.current = project.files;
 
-  const slow = info.kind !== 'html';
-  const built = useMemo(() => (info.kind === 'html' ? buildPreviewHtml(project.files, { observer: true }) : buildReactPreviewHtml(project.files, info.kind as 'react' | 'next', { observer: true })), [project.files, nonce, info.kind]);
+  const slow = info.kind !== 'html' && info.kind !== 'mock';
+  const built = useMemo(() => (info.kind === 'mock' ? { html: injectObserver(mockHtml ?? ''), entry: 'mock.html' as string | null, revoke: () => {} } : info.kind === 'html' ? buildPreviewHtml(project.files, { observer: true }) : buildReactPreviewHtml(project.files, info.kind as 'react' | 'next', { observer: true })), [project.files, nonce, info.kind, mockHtml]);
   useEffect(() => () => built.revoke(), [built]);
 
   // Receive audit messages from the sandboxed iframe.
@@ -133,6 +151,7 @@ const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo }
           {(['phone', 'tablet', 'desktop'] as const).map((d) => <button key={d} className={device === d ? 'seg-b on' : 'seg-b'} onClick={() => setDevice(d)}>{d}</button>)}
         </div>
         <button className="icon-btn" aria-label="reload" onClick={() => { issuesRef.current = []; setIssues([]); setNonce((n) => n + 1); }}><Icon name="refresh" size={16} /></button>
+        {info.kind === 'mock' && <button className="btn sm" onClick={() => void generateMockPreview(project.id).catch((e) => toast(errMsg(e), 'error'))} data-testid="regen-mock">تحديث المحاكاة</button>}
         <span className="spacer" />
         <FullButton full={full} onToggle={onToggleFull} />
         {remaining > 0 && <span className="observing" data-testid="observing"><ProgressRing value={total ? remaining / total : 0} size={30} label={String(remaining)} /> بيراقب…</span>}

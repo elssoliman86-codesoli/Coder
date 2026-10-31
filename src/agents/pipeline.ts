@@ -4,7 +4,7 @@ import { selectSkills, skillsPrompt } from '../skills/router';
 import { uiVocabulary } from '../ui-reference/lookup';
 import { throwIfAborted } from '../lib/util';
 import { primaryLanguage } from '../lib/lang';
-import { CODER_SYSTEM, CRITIC_SYSTEM, EDITOR_SYSTEM, EXPERT_FIX_SYSTEM, EXPERT_SCORE_SYSTEM, FIXER_SYSTEM, PLANNER_SYSTEM, PLAN_REVIEW_SYSTEM } from './prompts';
+import { CODER_SYSTEM, CRITIC_SYSTEM, EDITOR_SYSTEM, EXPERT_FIX_SYSTEM, EXPERT_SCORE_SYSTEM, FIXER_SYSTEM, PLANNER_SYSTEM, PLAN_REVIEW_SYSTEM, MOCK_SYSTEM } from './prompts';
 import { FileStreamParser, extractJson, stripCodeFence } from './parse';
 import { planToMarkdown, validatePlan } from './plan';
 import { analyzeProject, securityScan, worst, type Finding } from './analysis';
@@ -114,7 +114,7 @@ export async function planProject(ctx: RunCtx): Promise<Plan> {
       ctx.draft('PLAN.json', null);
     }
     try {
-      const { plan: first, errors } = validatePlan(extractJson(reply));
+      const { plan: first, errors } = validatePlan(extractJson(reply), { strict: attempt === 0 });
       let plan = first;
       if (plan) plan = await reviewPlan(ctx, p.description, plan);
       if (plan) {
@@ -135,7 +135,7 @@ export async function planProject(ctx: RunCtx): Promise<Plan> {
       lastErrors = [(e as Error).message];
     }
     ctx.log(`الخطة فيها مشاكل (محاولة ${attempt + 1}/3): ${lastErrors.join(' | ')}`, 'warn');
-    messages.push({ role: 'assistant', content: reply }, { role: 'user', content: `The plan is invalid. Fix these errors and return the full JSON again:\n- ${lastErrors.join('\n- ')}` });
+    messages.push({ role: 'assistant', content: reply }, { role: 'user', content: `The plan is invalid. Fix these errors and return the full JSON again. Reply with ONLY the JSON object (no prose, no markdown, no reasoning text) and keep descriptions short so the reply is not cut off:\n- ${lastErrors.join('\n- ')}` });
   }
   ctx.patch((x) => { x.status = 'error'; });
   throw new Error('فشل الـ Planner في إنتاج خطة صالحة: ' + lastErrors.join(' | '));
@@ -427,3 +427,32 @@ export async function runExpert(ctx: RunCtx, maxRounds = 3): Promise<ExpertRepor
   return report!;
 }
 
+
+// ---------- visual simulation for apps that cannot run in the browser ----------
+
+/** Asks the coder model for an interactive HTML simulation of the app and stores it on the project. */
+export async function generateMock(ctx: RunCtx): Promise<string> {
+  const p = ctx.getProject();
+  const ui = p.files.filter((f) => /\.(xml|kt|java|dart|xaml|cs|fxml|py|swift|vue|svelte|html|css|js|jsx|tsx|ts|md)$/i.test(f.path) && !/(^|\/)(build|node_modules)\//.test(f.path));
+  const user = [
+    `Project: ${p.name} (${p.type}, ${p.primaryLanguage})`,
+    `Description:\n${p.description}`,
+    p.plan ? `Design brief:\n${JSON.stringify(p.plan.design)}\nScreens:\n${JSON.stringify(p.plan.screens)}` : '',
+    `Project files:\n${filesContext(ui, { perFile: 6000, total: 70_000 })}`,
+    'Write the HTML simulation now.',
+  ].filter(Boolean).join('\n\n');
+  ctx.log('بيرسم محاكاة مرئية للتطبيق من الكود…');
+  ctx.draft('preview-simulation.html', '');
+  let acc = '';
+  let reply: string;
+  try {
+    reply = await ctx.chat('coder', [{ role: 'system', content: MOCK_SYSTEM }, { role: 'user', content: user }], (t) => { acc += t; ctx.draft('preview-simulation.html', acc); });
+  } finally {
+    ctx.draft('preview-simulation.html', null);
+  }
+  const html = stripCodeFence(reply).trim();
+  if (!/<html[\s>]|<!doctype html/i.test(html)) throw new Error('الموديل ما رجّعش صفحة HTML صالحة للمحاكاة');
+  ctx.patch((x) => { x.mock = { html, at: Date.now() }; });
+  ctx.log('المحاكاة جاهزة', 'ok');
+  return html;
+}

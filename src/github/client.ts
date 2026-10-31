@@ -37,11 +37,24 @@ export interface RunInfo {
   url: string;
 }
 
+export interface RepoSummary {
+  fullName: string;
+  name: string;
+  private: boolean;
+  defaultBranch: string;
+  description: string;
+  language: string;
+  updatedAt: string;
+  htmlUrl: string;
+  size: number;
+}
+
 export class GithubClient {
   private f: typeof fetch;
   private wait: (ms: number) => Promise<void>;
   constructor(private token: string, deps: GhDeps = {}) {
-    this.f = deps.fetch ?? fetch;
+    // Wrapped: a bare `fetch` stored on the instance throws "Illegal invocation" in browsers when called as this.f(...).
+    this.f = deps.fetch ?? ((input, init) => fetch(input, init));
     this.wait = deps.sleep ?? sleep;
   }
 
@@ -72,6 +85,55 @@ export class GithubClient {
     const r = await this.req<{ login: string }>('GET', '/user');
     const scopes = (r.headers.get('x-oauth-scopes') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     return { login: r.data.login, scopes };
+  }
+
+  async listRepos(max = 300): Promise<RepoSummary[]> {
+    const out: RepoSummary[] = [];
+    for (let page = 1; out.length < max; page++) {
+      const r = await this.req<any[]>('GET', `/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member&page=${page}`);
+      for (const x of r.data ?? []) out.push({ fullName: x.full_name, name: x.name, private: !!x.private, defaultBranch: x.default_branch ?? 'main', description: x.description ?? '', language: x.language ?? '', updatedAt: x.pushed_at ?? x.updated_at ?? '', htmlUrl: x.html_url, size: x.size ?? 0 });
+      if ((r.data ?? []).length < 100) break;
+    }
+    return out;
+  }
+
+  async getTree(owner: string, repo: string, ref: string): Promise<{ sha: string; truncated: boolean; tree: { path: string; type: string; sha: string; size?: number }[] }> {
+    const r = await this.req<any>('GET', `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+    return { sha: r.data.sha, truncated: !!r.data.truncated, tree: r.data.tree ?? [] };
+  }
+
+  /** Raw blob bytes (base64-decoded). */
+  async getBlob(owner: string, repo: string, sha: string): Promise<Uint8Array> {
+    const r = await this.req<any>('GET', `/repos/${owner}/${repo}/git/blobs/${sha}`);
+    const bin = atob(String(r.data.content ?? '').replace(/\s/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  /**
+   * Commits ONLY the given changes on top of the branch (base_tree), so files we never imported (images, binaries…)
+   * are untouched. `content: null` deletes the file. Creates `branch` from `baseBranch` when it does not exist yet.
+   */
+  async pushChanges(owner: string, repo: string, branch: string, baseBranch: string, changes: { path: string; content: string | null }[], message: string): Promise<string> {
+    let ref = await this.req<any>('GET', `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, undefined, { okStatus: [404] });
+    if (ref.status === 404) {
+      const base = await this.req<any>('GET', `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`);
+      await this.req('POST', `/repos/${owner}/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: base.data.object.sha });
+      ref = base;
+    }
+    const parentSha: string = ref.data.object.sha;
+    const parent = await this.req<any>('GET', `/repos/${owner}/${repo}/git/commits/${parentSha}`);
+    const entries: { path: string; mode: string; type: string; sha: string | null }[] = [];
+    await pool(changes, 4, async (c) => {
+      if (c.content === null) { entries.push({ path: c.path, mode: '100644', type: 'blob', sha: null }); return; }
+      const blob = await this.req<any>('POST', `/repos/${owner}/${repo}/git/blobs`, { content: b64(c.content), encoding: 'base64' });
+      entries.push({ path: c.path, mode: c.path.endsWith('.sh') ? '100755' : '100644', type: 'blob', sha: blob.data.sha });
+    });
+    const tree = await this.req<any>('POST', `/repos/${owner}/${repo}/git/trees`, { base_tree: parent.data.tree.sha, tree: entries });
+    const commit = await this.req<any>('POST', `/repos/${owner}/${repo}/git/commits`, { message, tree: tree.data.sha, parents: [parentSha] });
+    await this.req('PATCH', `/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, { sha: commit.data.sha, force: false });
+    return commit.data.sha as string;
   }
 
   async repoExists(owner: string, name: string): Promise<boolean> {

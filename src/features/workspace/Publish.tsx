@@ -36,18 +36,22 @@ export function PublishModal({ project, onClose, onOpenSettings }: { project: Pr
   const [error, setError] = useState<{ message: string; runUrl?: string; repoUrl?: string } | null>(null);
   const [done, setDone] = useState(false);
 
+  const linked = project.github;
+  const [branch, setBranch] = useState(linked ? (linked.branch === linked.baseBranch ? '2onebyte-edits' : linked.branch) : '');
   const needsToken = !gh.token;
-  const ready = !needsToken && !!model;
+  const ready = !needsToken && (linked ? !!branch.trim() : !!model);
 
   async function start() {
-    const [providerId, ...rest] = model.split('::');
-    setState((s) => { s.roles = { ...s.roles, expert: { providerId, modelId: rest.join('::') } }; });
+    if (!linked) {
+      const [providerId, ...rest] = model.split('::');
+      setState((s) => { s.roles = { ...s.roles, expert: { providerId, modelId: rest.join('::') } }; });
+    }
     setBlocked(null);
     setError(null);
-    setStep('expert');
+    setStep(linked ? 'github-user' : 'expert');
     const info = await runJob(project.id, 'publish', async (ctx) => {
       try {
-        return await publishProject(ctx, new GithubClient(gh.token), { repoName: repo, isPrivate: priv, step: setStep });
+        return await publishProject(ctx, new GithubClient(gh.token), { repoName: repo, isPrivate: priv, branch: branch.trim(), step: setStep });
       } catch (e) {
         if (e instanceof PublishBlocked) setBlocked(e.report);
         else if (e instanceof PublishFailed) setError({ message: e.message, runUrl: e.partial?.runUrl, repoUrl: e.partial?.repoUrl });
@@ -65,8 +69,17 @@ export function PublishModal({ project, onClose, onOpenSettings }: { project: Pr
     <Modal title={`${t('publish')} — ${t('handToExpert')}`} onClose={step ? () => {} : onClose} wide
       footer={!step && !done ? (<><button className="btn" onClick={onClose}>{t('cancel')}</button><button className="btn primary" disabled={!ready} onClick={start} data-testid="start-publish">{t('handToExpert')}</button></>) : done ? <button className="btn primary" onClick={onClose}>{t('close')}</button> : undefined}>
       {needsToken && <p className="field-error" role="alert">محتاج توكن GitHub. <button className="link" onClick={() => { onClose(); onOpenSettings(); }}>افتح الإعدادات</button></p>}
-      {opts.length === 0 && <p className="field-error" role="alert">{t('noModel')}</p>}
-      {!step && !done && (
+      {!linked && opts.length === 0 && <p className="field-error" role="alert">{t('noModel')}</p>}
+      {!step && !done && linked && (
+        <div className="stack" data-testid="publish-linked">
+          <p>الريبو: <a href={linked.htmlUrl} target="_blank" rel="noopener noreferrer" className="mono" dir="ltr">{linked.fullName}</a></p>
+          <Field label="ارفع التعديلات على فرع" hint={`الأساس: ${linked.baseBranch}. لو الفرع مش موجود هيتعمل منه. اكتب ${linked.baseBranch} للرفع المباشر عليه.`}>
+            <input className="input mono" dir="ltr" value={branch} onChange={(e) => setBranch(e.target.value)} data-testid="publish-branch" />
+          </Field>
+          <p className="muted small">بيترفع commit واحد فيه الملفات اللي اتغيّرت بس. الصور والملفات الثنائية اللي ما اتستوردتش مبتتلمسش. الفحص الأمني بيمنع رفع أي مفتاح مسرّب.</p>
+        </div>
+      )}
+      {!step && !done && !linked && (
         <div className="stack">
           <Field label={t('pickInspector')} hint="الخبير بيفحص الكود ويصلحه ويقيّمه. يفضل موديل غير موديل الكتابة.">
             <select className="input mono" dir="ltr" value={model} onChange={(e) => setModel(e.target.value)} data-testid="inspector-model">

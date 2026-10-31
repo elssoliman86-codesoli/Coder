@@ -169,3 +169,10 @@ textarea.input { resize: vertical; }
 .plan ul { margin: 4px 0; padding-inline-start: 20px; }
 .plan-files > li { margin-bottom: 8px; }
 .swatch { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; } .swatch i { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+
+.repo-list { list-style: none; margin: 0; padding: 0; max-height: 40dvh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.repo { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; text-align: start; flex-wrap: wrap; }
+.repo:hover, .repo.on { background: var(--surface-2); } .repo.on { box-shadow: inset 3px 0 var(--accent); }
+.repo-desc { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.terminal { white-space: pre-wrap; overflow-wrap: anywhere; }

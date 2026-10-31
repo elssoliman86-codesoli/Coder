@@ -163,6 +163,45 @@ await step('side menus: open/close by button, scrim, Escape and selection', asyn
   await T('sidebar').waitFor({ state: 'hidden' });
 });
 
+await step('GitHub import: repos → Start → file tree; native app gets a visual simulation; publish is branch-based', async () => {
+  const files = {
+    s1: '<manifest package="com.x.notes"/>', s2: 'package com.x.notes\nimport android.os.Bundle\nclass MainActivity', s3: 'plugins { id "com.android.application" }',
+  };
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  await page.route('https://api.github.com/**', async (route) => {
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    const u = new URL(req.url());
+    const json = (o, status = 200) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(o) });
+    if (u.pathname === '/user/repos') return json([{ full_name: 'me/notes-android', name: 'notes-android', private: true, default_branch: 'main', description: 'Notes app', language: 'Kotlin', pushed_at: '2026-01-01', html_url: 'https://github.com/me/notes-android', size: 9 }]);
+    if (u.pathname.includes('/git/trees/')) return json({ sha: 'T', truncated: false, tree: [
+      { path: 'app/src/main/AndroidManifest.xml', type: 'blob', sha: 's1', size: 30 },
+      { path: 'app/src/main/java/com/x/notes/MainActivity.kt', type: 'blob', sha: 's2', size: 60 },
+      { path: 'build.gradle', type: 'blob', sha: 's3', size: 30 },
+    ] });
+    const m = u.pathname.match(/git\/blobs\/(\w+)$/);
+    if (m) return json({ encoding: 'base64', content: Buffer.from(files[m[1]]).toString('base64') });
+    return json({ message: 'unexpected' }, 500);
+  });
+  await page.getByRole('button', { name: 'مشاريعي' }).first().click();
+  await T('new-project').click();
+  await T('gh-import').click();
+  await T('gh-repo').first().waitFor();
+  await T('gh-repo').first().click();
+  await T('gh-start').click();
+  await T('workspace').waitFor();
+  if (!(await T('sidebar').count())) await T('sidebar-toggle').click();
+  await T('tree-file').filter({ hasText: 'MainActivity.kt' }).first().waitFor();
+  await shot('10-github-import');
+  await T('preview-btn').click();
+  await T('make-mock').click();
+  await page.frameLocator('[data-testid=preview-frame]').getByText('Mock Phone').waitFor({ timeout: 30000 });
+  await shot('11-mock-preview');
+  await T('publish-btn').click();
+  await T('publish-linked').waitFor();
+  await T('publish-branch').waitFor();
+});
+
 if (pageErrors.length) { failed++; console.log('✗ page errors:\n  ' + pageErrors.join('\n  ')); }
 await browser.close();
 mock.kill();

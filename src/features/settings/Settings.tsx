@@ -100,6 +100,7 @@ function ProviderCard({ p }: { p: Provider }) {
         <Field label={t('baseUrl')}><input className="input mono" dir="ltr" value={p.baseUrl} onChange={(e) => set('baseUrl', e.target.value)} placeholder="https://…/v1" data-testid="prov-url" /></Field>
         <Field label={t('apiKey')} hint="بتتخزن مشفرة على الجهاز، ومابتظهرش في أي لوج."><input className="input mono" dir="ltr" type="password" autoComplete="off" value={p.apiKey} onChange={(e) => set('apiKey', e.target.value)} data-testid="prov-key" /></Field>
       </div>
+      {p.provider === 'nvidia' && <p className="muted small">NVIDIA NIM مابيبعتش CORS headers: شغّال في الـ APK، لكن المتصفح (PWA) هيحجبه. وبعض الموديلات في القايمة مش مفعّلة لحسابك — استخدم «اختبار الظاهر» واختار اللي حالته 200.</p>}
       {err && <p className="field-error" role="alert">{err}</p>}
       <div className="row">
         <button className="btn primary" onClick={list} disabled={loading} data-testid="list-models">{loading ? '…' : t('listModels')}</button>

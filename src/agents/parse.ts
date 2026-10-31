@@ -1,15 +1,14 @@
 import type { ProjectFile } from '../types';
 
 /** Extracts the first balanced JSON object from model output (handles ``` fences and chatter). */
-export function extractJson(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidates = fenced ? [fenced[1], text] : [text];
-  for (const c of candidates) {
-    const start = c.indexOf('{');
-    if (start < 0) continue;
+/** Parses the first balanced `{…}` in `c` starting at or after `from`, trying each `{` in turn. */
+function firstObject(c: string): unknown | undefined {
+  let start = c.indexOf('{');
+  while (start >= 0) {
     let depth = 0;
     let inStr = false;
     let esc = false;
+    let end = -1;
     for (let i = start; i < c.length; i++) {
       const ch = c[i];
       if (inStr) {
@@ -22,17 +21,38 @@ export function extractJson(text: string): unknown {
       else if (ch === '{') depth++;
       else if (ch === '}') {
         depth--;
-        if (depth === 0) {
-          try {
-            return JSON.parse(c.slice(start, i + 1));
-          } catch {
-            break;
-          }
-        }
+        if (depth === 0) { end = i; break; }
       }
     }
+    if (end > 0) {
+      const raw = c.slice(start, end + 1);
+      for (const attempt of [raw, raw.replace(/,\s*([}\]])/g, '$1')]) {
+        try {
+          const v = JSON.parse(attempt);
+          if (v && typeof v === 'object' && Object.keys(v).length > 0) return v;
+        } catch { /* try the next candidate */ }
+      }
+    }
+    start = c.indexOf('{', start + 1);
   }
-  throw new Error('الرد لا يحتوي على JSON صالح');
+  return undefined;
+}
+
+/**
+ * Extracts the JSON object from a model reply. Tolerates markdown fences, chatter around the JSON,
+ * reasoning blocks (<think>…</think>), trailing commas, and braces inside strings.
+ */
+export function extractJson(text: string): unknown {
+  const clean = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '');
+  const candidates: string[] = [];
+  for (const m of clean.matchAll(/```(?:json|JSON)?\s*([\s\S]*?)```/g)) candidates.push(m[1]);
+  candidates.push(clean);
+  for (const c of candidates) {
+    const v = firstObject(c);
+    if (v !== undefined) return v;
+  }
+  const truncated = clean.includes('{') && !clean.trimEnd().endsWith('}');
+  throw new Error(truncated ? 'الرد اتقطع قبل ما الـ JSON يكتمل (الخطة طويلة على حد الرد)' : 'الرد لا يحتوي على JSON صالح');
 }
 
 export function stripCodeFence(text: string): string {

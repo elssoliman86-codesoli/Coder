@@ -1,7 +1,7 @@
 import type { ProjectFile, ProjectType } from '../types';
 import { languageOf } from './lang';
 
-export type PreviewKind = 'html' | 'react' | 'next' | 'python' | 'node' | 'remote' | 'unsupported' | 'none';
+export type PreviewKind = 'html' | 'react' | 'next' | 'python' | 'node' | 'remote' | 'mockable' | 'unsupported' | 'none' | 'mock';
 
 export interface KindInfo {
   kind: PreviewKind;
@@ -49,6 +49,15 @@ export function detectKind(files: ProjectFile[], type: ProjectType, primaryLang:
   if (deps.react || has(/\.(jsx|tsx)$/)) {
     return { kind: 'react', label: 'React' };
   }
+  const hasIndexHtml = has(/(^|\/)index\.html$/);
+  const javaAndroid = files.some((x) => /\.(kt|java)$/.test(x.path) && /import\s+(android|androidx)\./.test(x.content));
+  const guiReq = files.some((x) => /(^|\/)(requirements[^/]*\.txt|pyproject\.toml|Pipfile)$/.test(x.path) && /\b(customtkinter|tkinterweb|PyQt[56]?|PySide[26]?|kivy|wxPython|pygame|pyglet|arcade|flet)\b/i.test(x.content));
+  const pyGui = guiReq || files.some((x) => /\.py$/.test(x.path) && /^\s*(import|from)\s+(tkinter|customtkinter|PyQt[56]?|PySide[26]?|kivy|wx|pygame|pyglet|arcade)\b/m.test(x.content));
+  const nativeUi = has(/(^|\/)AndroidManifest\.xml$/) || has(/(^|\/)pubspec\.yaml$/) || has(/\.(xaml|fxml|storyboard|xib)$/) || has(/\.csproj$/) && files.some((x) => /System\.Windows|WinForms|Avalonia|Maui/.test(x.content)) || javaAndroid || pyGui;
+  if (nativeUi && !hasIndexHtml) {
+    const what = has(/pubspec\.yaml$/) ? 'Flutter' : pyGui ? 'Python GUI' : has(/\.(xaml|csproj)$/) ? 'Desktop (.NET)' : has(/\.fxml$/) ? 'JavaFX' : 'Android native';
+    return { kind: 'mockable', label: what, note: `تطبيق ${what} بيتشغّل على الجهاز نفسه، مش في المتصفح. اضغط «إنشاء معاينة مرئية» والموديل هيرسم محاكاة تفاعلية لشاشاته من الكود (محاكاة للشكل مش تشغيل حقيقي). التشغيل الحقيقي: ابنِ الـ APK/EXE من النشر.` };
+  }
   if (has(/\.html?$/)) return { kind: 'html', label: type === 'apk' ? 'Runtime (نسخة ويب للتطبيق)' : 'Website' };
 
   const runnable = paths.filter((p) => !/(^|\/)(node_modules|test|tests|__tests__)\//.test(p));
@@ -58,5 +67,5 @@ export function detectKind(files: ProjectFile[], type: ProjectType, primaryLang:
     const lang = REMOTE_LANGS[ext(p)];
     if (lang) return { kind: 'remote', label: `${languageOf(p)} (runner بعيد)`, remoteLang: lang, note: 'بيتبعت الكود لخدمة تشغيل خارجية (Piston). الرابط بيتظبط من الإعدادات.' };
   }
-  return { kind: 'none', label: '—', note: 'مفيش ملف قابل للتشغيل أو المعاينة.' };
+  return { kind: 'none', label: '—', note: 'مفيش ملف قابل للتشغيل مباشرة. ممكن تعمل معاينة مرئية بالمحاكاة من الكود.' };
 }

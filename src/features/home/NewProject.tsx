@@ -6,6 +6,7 @@ import { detectProjectType, primaryLanguage } from '../../lib/lang';
 import { errMsg, uid } from '../../lib/util';
 import { setState } from '../../storage/store';
 import { startProject } from '../../runtime';
+import { GithubImportModal } from './GithubImport';
 import type { Project, ProjectFile } from '../../types';
 
 export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -18,6 +19,7 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; desc?: string }>({});
   const input = useRef<HTMLInputElement>(null);
+  const [ghOpen, setGhOpen] = useState(false);
 
   async function addFiles(list: File[]) {
     if (!list.length) return;
@@ -70,6 +72,11 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
         </>
       }
     >
+      <div className="row" style={{ marginBottom: 12 }}>
+        <button className="btn" onClick={() => setGhOpen(true)} data-testid="gh-import"><Icon name="github" size={16} /> استدعاء من GitHub</button>
+        <span className="muted small">افتح مشروع موجود على حسابك وعدّل عليه جزء جزء.</span>
+      </div>
+      {ghOpen && <GithubImportModal onClose={() => setGhOpen(false)} onImported={(id) => { setGhOpen(false); onCreated(id); }} />}
       <Field label={t('name')} error={errors.name}>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} data-testid="project-name" autoFocus />
       </Field>

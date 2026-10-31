@@ -14,7 +14,8 @@ export interface PlanValidation {
 }
 
 /** Validates and normalises the Planner's JSON. Returns human-readable errors the model can fix. */
-export function validatePlan(raw: unknown): PlanValidation {
+export function validatePlan(raw: unknown, opts: { strict?: boolean } = {}): PlanValidation {
+  const strict = opts.strict ?? true;
   const errors: string[] = [];
   if (!raw || typeof raw !== 'object') return { errors: ['الخطة ليست كائن JSON'] };
   const o = raw as Record<string, any>;
@@ -46,8 +47,9 @@ export function validatePlan(raw: unknown): PlanValidation {
 
   const CODE = /\.(js|mjs|cjs|jsx|ts|tsx|py|go|rs|java|kt|dart|cs|php|rb|swift|c|cpp)$/;
   const withFns = new Set(functions.map((f) => f.file));
-  const missing = files.filter((f) => CODE.test(f.path) && !withFns.has(f.path)).map((f) => f.path);
-  if (missing.length) errors.push(`كل ملف كود لازم يكون له دوال/كلاسات في functions. ناقص: ${missing.slice(0, 8).join(', ')}`);
+  const NO_FUNCTIONS = /(^|\/)(__init__\.py|conftest\.py|setup\.py|manage\.py|[^/]*\.config\.[a-z]+|[^/]*\.d\.ts|index\.(js|ts|jsx|tsx)|[^/]*\.test\.[a-z]+|[^/]*\.spec\.[a-z]+|test_[^/]*\.py)$/;
+  const missing = files.filter((f) => CODE.test(f.path) && !NO_FUNCTIONS.test(f.path) && !withFns.has(f.path)).map((f) => f.path);
+  if (strict && missing.length) errors.push(`كل ملف كود لازم يكون له دوال/كلاسات في functions. ناقص: ${missing.slice(0, 8).join(', ')}`);
 
   if (errors.length) return { errors };
 
