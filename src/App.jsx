@@ -40,7 +40,7 @@ function App(){
   const [newProject,setNewProject]=useState(false);
   const [newName,setNewName]=useState('');
   const [newDesc,setNewDesc]=useState('');
-  const [provider,setProvider]=useState({name:'My AI Provider',baseUrl:'https://api.openai.com/v1',apiKey:'',model:'gpt-4.1-mini',models:[]});
+  const [provider,setProvider]=useState(()=>readStore('onebyte.provider',{name:'My AI Provider',baseUrl:'https://api.openai.com/v1',apiKey:'',model:'gpt-4.1-mini',models:[]}));
   const [github,setGithub]=useState({token:'',owner:''});
   const [model,setModel]=useState('gpt-4.1-mini');
   const [reviewModel,setReviewModel]=useState('gpt-4.1-mini');
@@ -65,12 +65,30 @@ function App(){
   const tree=useMemo(()=>{const paths=Object.keys(files).sort();const rows=[];const seen=new Set();for(const path of paths){const parts=path.split('/');let parent='';for(let i=0;i<parts.length-1;i++){parent=parent?`${parent}/${parts[i]}`:parts[i];if(!seen.has(parent)){seen.add(parent);rows.push({kind:'folder',path:parent,name:parts[i],depth:i});}}rows.push({kind:'file',path,name:parts.at(-1),depth:parts.length-1});}return rows;},[files]);
   const flash=(s)=>{setNotice(s);setTimeout(()=>setNotice(''),3200)};
   useEffect(()=>{try{localStorage.setItem('onebyte.projects',JSON.stringify(projects))}catch{}},[projects]);
+  useEffect(()=>{try{localStorage.setItem('onebyte.provider',JSON.stringify(provider))}catch{}},[provider]);
   useEffect(()=>{try{localStorage.setItem('onebyte.active',active.id);localStorage.setItem(`onebyte.files.${active.id}`,JSON.stringify(files))}catch{}},[active,files]);
 
   async function loadModels(){
-    if(!provider.baseUrl||!provider.apiKey){flash('Add Base URL and API key first.');return;}
+    const baseUrl=provider.baseUrl.trim().replace(/\\/+$/,'');
+    const apiKey=provider.apiKey.trim();
+    if(!baseUrl||!apiKey){flash('Add Base URL and API key first.');return;}
     setModelsLoading(true);
-    try{const r=await fetch(`${API}/api/providers/models`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_url:provider.baseUrl,api_key:provider.apiKey})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not load models');setProvider(p=>({...p,models:d.models||[]}));flash(`${(d.models||[]).length} models loaded.`)}catch(e){flash(e.message)}finally{setModelsLoading(false)}
+    try{
+      const endpoint=/\\/models$/i.test(baseUrl)?baseUrl:`${baseUrl}/models`;
+      const r=await fetch(endpoint,{method:'GET',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json','Accept':'application/json'}});
+      const raw=await r.text();
+      let d={};
+      try{d=raw?JSON.parse(raw):{}}catch{d={message:raw.slice(0,300)}}
+      if(!r.ok)throw new Error(d.error?.message||d.detail||d.message||`Provider returned HTTP ${r.status}`);
+      const rows=Array.isArray(d)?d:(d.data||d.models||[]);
+      const models=rows.map(x=>typeof x==='string'?{id:x}:{id:x.id||x.name}).filter(x=>x.id);
+      if(!models.length)throw new Error('The endpoint responded, but no model IDs were found. Check that the Base URL points to an OpenAI-compatible /v1 API.');
+      setProvider(p=>({...p,models}));
+      flash(`${models.length} models loaded.`);
+    }catch(e){
+      const message=e instanceof TypeError?'Network/CORS error: the provider blocked browser access or the Base URL is unreachable. Try the provider API URL with /v1, or use a backend proxy that supports CORS.':e.message;
+      flash(message);
+    }finally{setModelsLoading(false)}
   }
   async function submitTask(text=prompt){
     if(!text.trim())return;
