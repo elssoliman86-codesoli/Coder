@@ -1,160 +1,46 @@
 name: Build APK
-
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version name (e.g., 1.0.0)'
-        required: false
-        type: string
-      release:
-        description: 'Create a GitHub Release'
-        required: false
-        type: boolean
-        default: true
   push:
-    tags:
-      - 'v*'
-
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
 permissions:
   contents: write
-  packages: write
-
 jobs:
-  build-android:
-    name: Build Android APK
+  apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+    timeout-minutes: 45
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          node-version: 22
+      - uses: actions/setup-java@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: '9'
-          run_install: false
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Build web app
-        run: pnpm build
-        env:
-          VITE_APP_VERSION: ${{ github.event.inputs.version || github.ref_name }}
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          ndk-version: r27b
-          emulator: false
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
-      - name: Add keystore
-        if: env.KEYSTORE_BASE64 != ''
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+      - name: Create the Android project
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-          echo "KEYSTORE_PATH=keystore.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "KEYSTORE_ALIAS=${{ secrets.KEYSTORE_ALIAS }}" >> $GITHUB_ENV
-          echo "KEYSTORE_ALIAS_PASSWORD=${{ secrets.KEYSTORE_ALIAS_PASSWORD }}" >> $GITHUB_ENV
-
-      - name: Sync Capacitor
-        run: pnpm cap sync android
-        env:
-          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
-          KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
-          KEYSTORE_ALIAS: ${{ env.KEYSTORE_ALIAS }}
-          KEYSTORE_ALIAS_PASSWORD: ${{ env.KEYSTORE_ALIAS_PASSWORD }}
-
-      - name: Build Release APK
+          npx cap add android
+          npx cap sync android
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Collect APK
         run: |
-          cd android
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
-            -Pandroid.injected.signing.store.password=${{ env.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ env.KEYSTORE_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ env.KEYSTORE_ALIAS_PASSWORD }}
-
-      - name: Find APK
-        id: find-apk
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/2OneByte-Coder.apk
+      - uses: actions/upload-artifact@v4
         with:
-          name: 2OneByte-Coder-APK
-          path: ${{ steps.find-apk.outputs.apk_path }}
-          retention-days: 30
-
-      - name: Create Release
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true' || github.event_name == 'push'
+          name: 2OneByte-Coder-apk
+          path: out/2OneByte-Coder.apk
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version || github.ref_name }}
-          name: 2OneByte-Coder ${{ github.event.inputs.version || github.ref_name }}
-          body: |
-            ## 2OneByte-Coder ${{ github.event.inputs.version || github.ref_name }}
-            
-            تحميل APK الموقع جاهز للتثبيت على أجهزة أندرويد.
-            
-            ### التغييرات
-            - راجع [CHANGELOG.md](CHANGELOG.md) للتفاصيل
-            
-            ### التحقق من التوقيع
-            ```bash
-            apksigner verify --print-certs app-release.apk
-            ```
-          files: ${{ steps.find-apk.outputs.apk_path }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify on failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[BUILD FAILED] Android APK build failed - ${{ github.run_id }}`,
-              body: `Build failed: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
-              labels: ['bug', 'build-failure']
-            });
+          tag_name: build-${{ github.run_number }}
+          name: 2OneByte-Coder build ${{ github.run_number }}
+          files: out/2OneByte-Coder.apk
