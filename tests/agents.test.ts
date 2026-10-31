@@ -294,7 +294,7 @@ function editCtx(script: (role: string, system: string, user: string) => string)
 
 test('applyEdit: understands the request, picks files, reviews, and reports', async () => {
   const infos: any[] = [];
-  const t = editCtx((role, system, user) => {
+  const t = editCtx((role, system) => {
     if (system.includes('Request Analyst')) return JSON.stringify({ understanding: 'ضيف زرار ثاني', files: ['index.html', 'nope.txt'], newFiles: [], acceptance: ['فيه زرار id=b'] });
     if (system.includes('Change Reviewer')) return JSON.stringify({ satisfied: true, missing: [] });
     if (role === 'coder') return fileBlock('index.html', '<!doctype html><html><body><button id="a">A</button><button id="b">B</button><script src="app.js"></script></body></html>');
