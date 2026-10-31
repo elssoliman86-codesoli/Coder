@@ -1,40 +1,6 @@
 {
   "appId": "com.onebyte.coder",
-  "appName": "Coder",
+  "appName": "OneByte Coder",
   "webDir": "dist",
-  "server": {
-    "url": "http://10.0.2.2:5173",
-    "cleartext": true
-  },
-  "android": {
-    "buildOptions": {
-      "keystorePath": "release.keystore",
-      "keystoreAlias": "coder",
-      "keystorePassword": "REPLACE_WITH_KEYSTORE_PASSWORD",
-      "keyPassword": "REPLACE_WITH_KEY_PASSWORD"
-    }
-  },
-  "plugins": {
-    "SplashScreen": {
-      "launchShowDuration": 2000,
-      "backgroundColor": "#0f172a",
-      "showSpinner": true,
-      "spinnerColor": "#3b82f6"
-    },
-    "StatusBar": {
-      "style": "DARK",
-      "backgroundColor": "#0f172a"
-    },
-    "Keyboard": {
-      "resize": "body",
-      "style": "DARK",
-      "resizeOnFullScreen": true
-    },
-    "Preferences": {
-      "group": "CoderPrefs"
-    },
-    "App": {
-      "launchUrl": "/"
-    }
-  }
+  "server": { "androidScheme": "https" }
 }
