@@ -37,7 +37,7 @@ jobs:
           ZIP: ${{ steps.archive.outputs.zip }}
         run: |
           python3 - <<'PY'
-          import os, sys, zipfile
+          import os, zipfile
           path = os.environ["ZIP"]
           with zipfile.ZipFile(path) as z:
               for item in z.infolist():
@@ -48,19 +48,27 @@ jobs:
               z.extractall("extracted")
           PY
 
+      - name: Locate project root
+        id: project
+        shell: bash
+        run: |
+          PACKAGE="$(find extracted -type f -name package.json -print -quit)"
+          if [ -z "$PACKAGE" ]; then
+            echo "No package.json found in archive. Archive contents:"
+            find extracted -maxdepth 5 -print | head -200
+            exit 1
+          fi
+          SOURCE="$(dirname "$PACKAGE")"
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+          echo "Project root: $SOURCE"
+
       - name: Replace repository files with archive contents
         env:
+          SOURCE: ${{ steps.project.outputs.source }}
           ZIP: ${{ steps.archive.outputs.zip }}
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t roots < <(find extracted -mindepth 1 -maxdepth 1 -type d -print)
-          if [ "${#roots[@]}" -eq 1 ] && [ -d "${roots[0]}" ]; then
-            SOURCE="${roots[0]}"
-          else
-            SOURCE="extracted"
-          fi
-          test -f "$SOURCE/package.json" || { echo "package.json not found at archive root"; exit 1; }
           rsync -a --delete \
             --exclude='.git/' \
             --exclude='.github/workflows/import-project-zip.yml' \
