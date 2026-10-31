@@ -46,7 +46,6 @@ jobs:
                   if name.startswith("/") or any(p == ".." for p in parts):
                       raise SystemExit(f"Unsafe archive path: {name}")
               z.extractall("extracted")
-          PY
 
       - name: Locate project root
         id: project
@@ -54,7 +53,7 @@ jobs:
         run: |
           PACKAGE="$(find extracted -type f -name package.json -print -quit)"
           if [ -z "$PACKAGE" ]; then
-            echo "No package.json found in archive. Archive contents:"
+            echo "No package.json found in archive."
             find extracted -maxdepth 5 -print | head -200
             exit 1
           fi
@@ -69,10 +68,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          STAGED="$RUNNER_TEMP/project-source"
+          mkdir -p "$STAGED"
+          cp -a "$SOURCE/." "$STAGED/"
           rsync -a --delete \
             --exclude='.git/' \
-            --exclude='.github/workflows/import-project-zip.yml' \
-            "$SOURCE/" ./
+            --exclude='.github/' \
+            "$STAGED/" ./
           rm -f "$ZIP"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
