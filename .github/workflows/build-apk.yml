@@ -19,7 +19,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
       - run: npm install
       - run: npm test
       - run: npm run build
@@ -29,7 +31,9 @@ jobs:
           npx cap sync android
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
       - name: Collect APK
         run: |
           mkdir -p out
