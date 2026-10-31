@@ -278,3 +278,75 @@ test('planProject: reviewer can replace the plan with a fuller one', async () =>
   const plan = await planProject(t.ctx);
   assert.equal(plan.files.length, goodPlan.files.length + 1);
 });
+
+// ---------- edit requests: understand → apply → review → repair ----------
+
+function editCtx(script: (role: string, system: string, user: string) => string) {
+  const files = [{ path: 'index.html', content: '<!doctype html><html><body><button id="a">A</button><script src="app.js"></script></body></html>' }, { path: 'app.js', content: 'document.getElementById("a").onclick = () => {};\n' }, { path: 'style.css', content: 'body{margin:0}' }];
+  const calls: { role: string; user: string }[] = [];
+  const t = makeCtx((role, messages) => {
+    const system = String(messages[0].content); const user = String(messages[messages.length - 1].content);
+    calls.push({ role, user });
+    return script(role, system, user);
+  }, { files, plan: validatePlan(goodPlan).plan!, status: 'ready' });
+  return { ...t, calls };
+}
+
+test('applyEdit: understands the request, picks files, reviews, and reports', async () => {
+  const infos: any[] = [];
+  const t = editCtx((role, system, user) => {
+    if (system.includes('Request Analyst')) return JSON.stringify({ understanding: 'ضيف زرار ثاني', files: ['index.html', 'nope.txt'], newFiles: [], acceptance: ['فيه زرار id=b'] });
+    if (system.includes('Change Reviewer')) return JSON.stringify({ satisfied: true, missing: [] });
+    if (role === 'coder') return fileBlock('index.html', '<!doctype html><html><body><button id="a">A</button><button id="b">B</button><script src="app.js"></script></body></html>');
+    return '';
+  });
+  const changed = await applyEdit(t.ctx, 'ضيف زرار ثاني', (i) => infos.push(i));
+  assert.deepEqual(changed, ['index.html']);
+  const coder = t.calls.filter((c) => c.role === 'coder');
+  assert.equal(coder.length, 1, 'no repair round when the review passes');
+  assert.match(coder[0].user, /Understood as: ضيف زرار ثاني/);
+  assert.match(coder[0].user, /فيه زرار id=b/);
+  assert.ok(coder[0].user.includes('--- index.html ---'));
+  assert.equal(infos[0].understanding, 'ضيف زرار ثاني');
+  assert.equal(infos.at(-1).satisfied, true);
+});
+
+test('applyEdit: an unmet review triggers one repair round with the problems in the prompt', async () => {
+  let n = 0;
+  const t = editCtx((role, system) => {
+    if (system.includes('Request Analyst')) return JSON.stringify({ understanding: 'u', files: ['app.js'], acceptance: [] });
+    if (system.includes('Change Reviewer')) return n === 1 ? JSON.stringify({ satisfied: false, missing: ['app.js: الزرار b مالوش handler'] }) : JSON.stringify({ satisfied: true, missing: [] });
+    if (role === 'coder') { n++; return fileBlock('app.js', n === 1 ? 'var x = 1;\n' : 'document.getElementById("b").onclick = () => {};\n'); }
+    return '';
+  });
+  const infos: any[] = [];
+  await applyEdit(t.ctx, 'اربط الزرار', (i) => infos.push(i));
+  const coder = t.calls.filter((c) => c.role === 'coder');
+  assert.equal(coder.length, 2);
+  assert.match(coder[1].user, /reviewer found these problems/);
+  assert.match(coder[1].user, /الزرار b مالوش handler/);
+  assert.match(t.get().files.find((f) => f.path === 'app.js')!.content, /getElementById\("b"\)/);
+  assert.equal(infos.at(-1).satisfied, true);
+  assert.equal(infos.at(-1).rounds, 2);
+});
+
+test('applyEdit: a syntax error is caught by the deterministic check even if the reviewer is silent', async () => {
+  let n = 0;
+  const t = editCtx((role, system) => {
+    if (system.includes('Request Analyst')) return 'not json';
+    if (system.includes('Change Reviewer')) return 'looks fine';
+    if (role === 'coder') { n++; return fileBlock('app.js', n === 1 ? 'function (' : 'var ok = 1;\n'); }
+    return '';
+  });
+  await applyEdit(t.ctx, 'x');
+  assert.equal(n, 2, 'repair round ran');
+  assert.equal(t.get().files.find((f) => f.path === 'app.js')!.content, 'var ok = 1;\n');
+});
+
+test('runFixCycle: the user\'s note becomes a mandatory issue even when the critic finds nothing', async () => {
+  const t = editCtx((role) => (role === 'critic' ? JSON.stringify({ summary: 'ok', issues: [] }) : role === 'fixer' ? fileBlock('style.css', 'body{margin:0;color:red}') : ''));
+  const r = await runFixCycle(t.ctx, { observed: [], userCritique: 'خلي النص أحمر' });
+  assert.equal(r.critic.issues[0].type, 'user-request');
+  assert.ok(r.fix, 'the fixer ran');
+  assert.match(t.get().files.find((f) => f.path === 'style.css')!.content, /red/);
+});

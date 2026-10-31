@@ -4,7 +4,7 @@ import { selectSkills, skillsPrompt } from '../skills/router';
 import { uiVocabulary } from '../ui-reference/lookup';
 import { throwIfAborted } from '../lib/util';
 import { primaryLanguage } from '../lib/lang';
-import { CODER_SYSTEM, CRITIC_SYSTEM, EDITOR_SYSTEM, EXPERT_FIX_SYSTEM, EXPERT_SCORE_SYSTEM, FIXER_SYSTEM, PLANNER_SYSTEM, PLAN_REVIEW_SYSTEM, MOCK_SYSTEM } from './prompts';
+import { CODER_SYSTEM, CRITIC_SYSTEM, EDITOR_SYSTEM, EXPERT_FIX_SYSTEM, EXPERT_SCORE_SYSTEM, FIXER_SYSTEM, PLANNER_SYSTEM, PLAN_REVIEW_SYSTEM, MOCK_SYSTEM, EDIT_ANALYZE_SYSTEM, EDIT_REVIEW_SYSTEM } from './prompts';
 import { FileStreamParser, extractJson, stripCodeFence } from './parse';
 import { planToMarkdown, validatePlan } from './plan';
 import { analyzeProject, securityScan, worst, type Finding } from './analysis';
@@ -216,18 +216,125 @@ async function applyFileBlocks(ctx: RunCtx, role: Role, messages: ChatMessage[])
   return changed;
 }
 
-export async function applyEdit(ctx: RunCtx, instruction: string): Promise<string[]> {
+export interface EditInfo {
+  understanding: string;
+  /** null = the reviewer gave no usable verdict. */
+  satisfied: boolean | null;
+  missing: string[];
+  rounds: number;
+}
+
+interface EditAnalysis { understanding: string; files: string[]; newFiles: string[]; acceptance: string[] }
+
+/** Step 1: understand the request and pick the files it touches (falls back to keyword matching, then everything). */
+export async function analyzeEditRequest(ctx: RunCtx, instruction: string): Promise<EditAnalysis> {
   const p = ctx.getProject();
-  const vocab = await uiVocabulary(p.description + ' ' + instruction, { live: false, style: p.plan?.design.style ?? p.style });
-  const system = [EDITOR_SYSTEM, skillBlock(ctx, p, 'coder', p.description + ' ' + instruction), vocab.text].filter(Boolean).join('\n\n');
-  const user = [
-    p.plan ? `Plan:\n${planBrief(p.plan)}` : `Project description:\n${p.description}`,
-    `Current files:\n${filesContext(p.files)}`,
-    `Change request:\n${instruction}`,
-  ].join('\n\n');
-  ctx.log('الـ Coder بيطبّق التعديل…');
-  const changed = await applyFileBlocks(ctx, 'coder', [{ role: 'system', content: system }, { role: 'user', content: user }]);
-  if (changed.length === 0) throw new Error('الموديل ما رجّعش أي ملفات معدّلة');
+  const paths = p.files.map((f) => f.path);
+  const fallbackFiles = (): string[] => {
+    const words = instruction.toLowerCase().split(/[^\p{L}\p{N}_]+/u).filter((w) => w.length > 2);
+    const hit = p.files.filter((f) => words.some((w) => f.path.toLowerCase().includes(w) || f.content.toLowerCase().includes(w))).map((f) => f.path);
+    return hit.length ? hit : paths;
+  };
+  const fallback: EditAnalysis = { understanding: instruction, files: fallbackFiles(), newFiles: [], acceptance: [] };
+  try {
+    const user = [
+      p.plan ? `Plan:\n${planBrief(p.plan)}` : `Project description:\n${p.description}`,
+      `Files (${p.files.length}):\n${p.files.map((f) => `- ${f.path} (${f.content.length} chars)`).join('\n').slice(0, 12_000)}`,
+      `User request:\n${instruction}`,
+    ].join('\n\n');
+    const reply = await ctx.chat('planner', [{ role: 'system', content: EDIT_ANALYZE_SYSTEM }, { role: 'user', content: user }]);
+    const o = extractJson(reply) as Record<string, unknown>;
+    const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
+    const files = strs(o.files).filter((f) => paths.includes(f));
+    const understanding = typeof o.understanding === 'string' && o.understanding.trim() ? o.understanding.trim() : '';
+    if (!understanding) return fallback;
+    return { understanding, files: files.length ? files : fallback.files, newFiles: strs(o.newFiles), acceptance: strs(o.acceptance).slice(0, 8) };
+  } catch (e) {
+    if (ctx.signal.aborted) throw e;
+    return fallback;
+  }
+}
+
+/** Step 3: independent review of the result against the request (+ deterministic syntax checks). */
+async function reviewEdit(ctx: RunCtx, instruction: string, a: EditAnalysis, changed: string[]): Promise<{ satisfied: boolean | null; missing: string[] }> {
+  const p = ctx.getProject();
+  const syntax = analyzeProject(p.files).filter((i) => i.severity === 'high' || i.severity === 'critical').map((i) => `[خطأ] ${i.file}: ${i.message}`);
+  let satisfied: boolean | null = null;
+  let missing: string[] = [];
+  try {
+    const user = [
+      `User request:\n${instruction}`,
+      `Understood as: ${a.understanding}`,
+      a.acceptance.length ? `Acceptance checks:\n${a.acceptance.map((x) => `- ${x}`).join('\n')}` : '',
+      `Current content of the changed files:\n${filesContext(p.files, { only: changed, perFile: 30_000, total: 90_000 })}`,
+    ].filter(Boolean).join('\n\n');
+    const reply = await ctx.chat('critic', [{ role: 'system', content: EDIT_REVIEW_SYSTEM }, { role: 'user', content: user }]);
+    const o = extractJson(reply) as { satisfied?: unknown; missing?: unknown };
+    if (typeof o.satisfied === 'boolean') {
+      satisfied = o.satisfied;
+      missing = Array.isArray(o.missing) ? o.missing.map(String).filter(Boolean) : [];
+    }
+  } catch (e) {
+    if (ctx.signal.aborted) throw e;
+  }
+  const all = [...syntax, ...missing];
+  if (all.length) return { satisfied: false, missing: all };
+  return { satisfied, missing: [] };
+}
+
+/**
+ * Applies a change request: understand → apply (with the right files in full) → review against the request → one repair round if needed.
+ * `onInfo` receives the understanding and the review verdict so the UI can show them.
+ */
+export async function applyEdit(ctx: RunCtx, instruction: string, onInfo?: (i: EditInfo) => void): Promise<string[]> {
+  const p0 = ctx.getProject();
+  const vocab = await uiVocabulary(p0.description + ' ' + instruction, { live: false, style: p0.plan?.design.style ?? p0.style });
+  const system = [EDITOR_SYSTEM, skillBlock(ctx, p0, 'coder', p0.description + ' ' + instruction), vocab.text].filter(Boolean).join('\n\n');
+
+  ctx.log('بيحلل الطلب ويحدد الملفات المطلوبة…');
+  const a = await analyzeEditRequest(ctx, instruction);
+  ctx.log(`فهمت الطلب: ${a.understanding}`);
+  const info: EditInfo = { understanding: a.understanding, satisfied: null, missing: [], rounds: 0 };
+  onInfo?.(info);
+
+  const touched = new Set<string>();
+  let problems: string[] = [];
+  for (let round = 0; round < 2; round++) {
+    throwIfAborted(ctx.signal);
+    const p = ctx.getProject();
+    const focus = [...new Set([...a.files, ...touched])];
+    const others = p.files.filter((f) => !focus.includes(f.path));
+    const user = [
+      p.plan ? `Plan:\n${planBrief(p.plan)}` : `Project description:\n${p.description}`,
+      `Files to change (full content):\n${filesContext(p.files, { only: focus, perFile: 40_000, total: 100_000 })}`,
+      others.length ? `Other files (reference only, may be truncated):\n${filesContext(others, { perFile: 1500, total: 15_000 })}` : '',
+      `Change request:\n${instruction}`,
+      `Understood as: ${a.understanding}`,
+      a.newFiles.length ? `Files you probably need to create: ${a.newFiles.join(', ')}` : '',
+      a.acceptance.length ? `The result must satisfy:\n${a.acceptance.map((x) => `- ${x}`).join('\n')}` : '',
+      round > 0 ? `A reviewer found these problems in your previous attempt. Fix ALL of them now (return the complete corrected files):\n${problems.map((x) => `- ${x}`).join('\n')}` : '',
+    ].filter(Boolean).join('\n\n');
+    ctx.log(round === 0 ? 'الـ Coder بيطبّق التعديل…' : 'الـ Coder بيصلح ملاحظات المراجعة…');
+    const changed = await applyFileBlocks(ctx, 'coder', [{ role: 'system', content: system }, { role: 'user', content: user }]);
+    if (round === 0 && changed.length === 0) throw new Error('الموديل ما رجّعش أي ملفات معدّلة');
+    changed.forEach((c) => touched.add(c));
+    info.rounds = round + 1;
+
+    ctx.log('مراجعة النتيجة مقابل الطلب…');
+    const review = await reviewEdit(ctx, instruction, a, [...touched]);
+    info.satisfied = review.satisfied;
+    info.missing = review.missing;
+    onInfo?.({ ...info });
+    if (review.satisfied !== false) {
+      ctx.log(review.satisfied ? 'المراجعة: الطلب اتنفّذ بالكامل' : 'المراجعة: ما قدرتش أتحقق، لكن مفيش أخطاء ظاهرة', review.satisfied ? 'ok' : 'info');
+      break;
+    }
+    problems = review.missing;
+    ctx.log(`المراجعة لقت ${problems.length} نقطة: ${problems.slice(0, 3).join(' | ')}`, 'warn');
+    if (round === 1) ctx.log('فاضل ملاحظات بعد جولة الإصلاح — راجعها واطلب تعديل تاني لو لزم', 'warn');
+  }
+
+  const changed = [...touched];
   ctx.patch((x) => {
     if (!x.plan) return;
     for (const path of changed) if (!x.plan.files.some((f) => f.path === path)) x.plan.files.push({ path, purpose: 'added by an edit request' });
@@ -333,6 +440,13 @@ export async function runFixer(ctx: RunCtx, issues: CriticIssue[]): Promise<FixR
 
 export async function runFixCycle(ctx: RunCtx, input: { observed: ObservedIssue[]; userCritique?: string; bodyText?: string }): Promise<{ critic: CriticResult; fix: FixResult | null }> {
   const critic = await runCritic(ctx, input);
+  const note = input.userCritique?.trim();
+  if (note && !critic.issues.some((i) => i.type === 'user-request')) {
+    // The user's own note is a hard requirement: it becomes an issue even if the critic found nothing.
+    const files = ctx.getProject().files;
+    const file = files.find((f) => /\.(html|css|jsx|tsx|vue|svelte)$/.test(f.path))?.path ?? files[0]?.path ?? '';
+    critic.issues.unshift({ id: 'U1', element: '(ملاحظة المستخدم)', file, type: 'user-request', severity: 'high', description: note, suggestion: 'Implement exactly what the user asked for, in the files where it belongs.' });
+  }
   if (critic.issues.length === 0) return { critic, fix: null };
   const fix = await runFixer(ctx, critic.issues);
   ctx.patch((x) => { x.reviewCycles += 1; });

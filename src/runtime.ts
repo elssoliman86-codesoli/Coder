@@ -168,7 +168,7 @@ export async function processQueue(id: string, onlyItem?: string) {
       updateQueue(id, next.id, (q) => { q.status = 'running'; q.snapshot = before; });
       let ok = false;
       const changed = await runJob(id, 'edit', async (ctx) => {
-        const c = await applyEdit(ctx, next.prompt);
+        const c = await applyEdit(ctx, next.prompt, (i) => updateQueue(id, next.id, (q) => { q.understanding = i.understanding; q.satisfied = i.satisfied; q.missing = i.missing; }));
         ok = true;
         return c;
       });

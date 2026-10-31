@@ -112,6 +112,8 @@ await step('edit queue: prompt is applied and can be undone', async () => {
   await T('prompt-send').click();
   await page.waitForSelector('[data-testid=queue-item][data-status=done]', { timeout: 60000 });
   await T('tree-file').filter({ hasText: 'index.html' }).first().click();
+  await T('queue-understanding').first().waitFor();
+  await page.getByText('✓ اتراجع').first().waitFor();
   await page.getByText('تم التعديل').first().waitFor();
   await shot('06-queue-done');
 });

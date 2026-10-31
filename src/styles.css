@@ -176,3 +176,5 @@ textarea.input { resize: vertical; }
 .repo-desc { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .terminal { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.qunder { flex-basis: 100%; } .qmissing { flex-basis: 100%; margin: 0; padding-inline-start: 18px; color: var(--warn); }

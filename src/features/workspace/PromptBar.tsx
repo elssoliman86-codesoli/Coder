@@ -21,6 +21,8 @@ function Chip({ project, item, first, last }: { project: Project; item: QueueIte
         <span className="qtext" title={item.prompt}>{item.status === 'running' && <Spinner />} {item.prompt}</span>
       )}
       <span className="badge">{STATUS[item.status]}</span>
+      {item.status === 'done' && item.satisfied === true && <span className="badge badge-ok" title="راجع الموديل النتيجة مقابل طلبك">✓ اتراجع</span>}
+      {item.status === 'done' && item.satisfied === false && <span className="badge badge-warn" title={(item.missing ?? []).join('\n')} data-testid="queue-missing">فيه نقص ({item.missing?.length ?? 0})</span>}
       {item.status === 'queued' && (
         <span className="qacts">
           <button className="icon-btn" aria-label="up" disabled={first} onClick={() => moveQueue(id, item.id, -1)}><Icon name="up" size={16} /></button>
@@ -34,6 +36,8 @@ function Chip({ project, item, first, last }: { project: Project; item: QueueIte
       {item.status === 'done' && !item.undone && item.filesTouched.length > 0 && (
         <button className="btn sm" onClick={() => undoQueueItem(id, item.id)}><Icon name="undo" size={14} /> تراجع</button>
       )}
+      {item.understanding && <span className="qunder muted small" data-testid="queue-understanding">فهمت: {item.understanding}</span>}
+      {item.status === 'done' && item.satisfied === false && item.missing && item.missing.length > 0 && <ul className="qmissing small">{item.missing.slice(0, 4).map((m, i) => <li key={i}>{m}</li>)}</ul>}
       {item.error && item.status === 'failed' && <span className="field-error small">{item.error}</span>}
     </li>
   );

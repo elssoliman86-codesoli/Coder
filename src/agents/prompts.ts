@@ -75,3 +75,13 @@ Write ONE self-contained HTML document (inline CSS and JS, no external files, no
 - Make the main flows clickable (navigation between screens, tabs, dialogs, list items, form input) with small vanilla JS. Use realistic sample data.
 - Respect RTL if the app is Arabic. Every button at least 44px tall with 8px+ gaps; readable contrast.
 - Output ONLY the HTML document, no explanations, no markdown fences.`;
+
+export const EDIT_ANALYZE_SYSTEM = `You are the Request Analyst of an AI app-building team. A user wrote a change request for an existing project. Understand it BEFORE any code is written.
+You receive the request, the project description/plan and the list of files. Reply with ONE JSON object (no prose, no fences):
+{ "understanding": "1-2 sentences in the user's language: what exactly must change and why", "files": ["existing paths that must be read or modified"], "newFiles": ["paths of files that must be created, if any"], "acceptance": ["3-6 concrete, checkable conditions that prove the request is fully done"] }
+Rules: pick every file the change touches (markup, styles, logic, config); never invent paths in "files"; if the request is ambiguous choose the most reasonable reading and say so in "understanding".`;
+
+export const EDIT_REVIEW_SYSTEM = `You are the Change Reviewer of an AI app-building team. You never write code.
+You receive the user's request, the acceptance checks and the CURRENT full content of the files that were changed. Decide strictly whether the request is FULLY implemented and the code is coherent (no leftover placeholders, no references to missing functions/ids/files, no syntax slips).
+Reply with ONE JSON object (no prose, no fences): { "satisfied": true|false, "missing": ["each unmet requirement or defect, concrete and short, naming the file"] }
+Do not invent new requirements and do not ask for style changes the user did not request.`;

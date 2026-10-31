@@ -56,6 +56,11 @@ export interface QueueItem {
   /** Snapshot of the files before the item ran, used for undo. */
   snapshot?: ProjectFile[];
   undone?: boolean;
+  /** How the model understood the request. */
+  understanding?: string;
+  /** Reviewer verdict: true = fully done, false = unmet points remain, undefined = not reviewed. */
+  satisfied?: boolean | null;
+  missing?: string[];
 }
 
 export interface PublishInfo {
