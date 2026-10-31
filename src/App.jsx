@@ -74,7 +74,7 @@ function App(){
     if(!baseUrl||!apiKey){flash('Add Base URL and API key first.');return;}
     setModelsLoading(true);
     try{
-      const endpoint=/\\/models$/i.test(baseUrl)?baseUrl:`${baseUrl}/models`;
+      const endpoint=baseUrl.toLowerCase().endsWith('/models')?baseUrl:`${baseUrl}/models`;
       const r=await fetch(endpoint,{method:'GET',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json','Accept':'application/json'}});
       const raw=await r.text();
       let d={};
