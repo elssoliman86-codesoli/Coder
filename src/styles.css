@@ -159,3 +159,4 @@ textarea.input { resize: vertical; }
 
 .side-scrim { position: fixed; inset: 0; z-index: 44; background: rgba(0,0,0,.5); }
 @keyframes slide-left { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.log-error { white-space: pre-wrap; max-height: 30vh; overflow: auto; }

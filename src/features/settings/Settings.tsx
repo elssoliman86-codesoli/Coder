@@ -210,8 +210,9 @@ const ROLE_LABEL: Record<Role, string> = { planner: 'Planner (الموديل ا�
 export function modelOptions(providers: Provider[]): { value: string; label: string }[] {
   const out: { value: string; label: string }[] = [];
   for (const p of providers) {
-    const sorted = [...p.models].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || a.id.localeCompare(b.id));
-    for (const m of sorted) out.push({ value: `${p.id}::${m.id}`, label: `${m.starred ? '★ ' : ''}${m.id} — ${p.name || p.provider}` });
+    const rank = (m: Provider['models'][number]) => (m.status === 'ok' ? 0 : m.status === 'error' ? 2 : 1);
+    const sorted = [...p.models].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || rank(a) - rank(b) || a.id.localeCompare(b.id));
+    for (const m of sorted) out.push({ value: `${p.id}::${m.id}`, label: `${m.starred ? '★ ' : ''}${m.status === 'ok' ? '✓ ' : m.status === 'error' ? '✗ ' : ''}${m.id} — ${p.name || p.provider}` });
   }
   return out;
 }

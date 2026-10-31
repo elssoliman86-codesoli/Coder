@@ -6,7 +6,7 @@ import { app, commitFile, createStore, patchProject } from './storage/store';
 import { BUILTIN_SKILLS } from './skills/builtin';
 import { Aborted, errMsg, uid } from './lib/util';
 import type { Role, Skill } from './types';
-import { streamChat, type ChatMessage } from './llm/client';
+import { explainHttpError, streamChat, type ChatMessage } from './llm/client';
 import { applyEdit, generateProject, planProject } from './agents/pipeline';
 
 export interface LogLine {
@@ -70,7 +70,7 @@ export function makeCtx(id: string, signal: AbortSignal): RunCtx {
     chat: (role: Role, messages: ChatMessage[], onToken) => {
       const ep = resolveEndpoint(role);
       const st = app.get().settings;
-      return streamChat(ep, { model: ep.model, messages, signal, onToken, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 });
+      return streamChat(ep, { model: ep.model, messages, signal, onToken, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
     },
   };
 }

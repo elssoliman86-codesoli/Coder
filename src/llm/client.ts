@@ -250,3 +250,17 @@ export const PROVIDER_PRESETS: { id: string; label: string; baseUrl: string }[] 
   { id: 'ollama', label: 'Ollama (local)', baseUrl: 'http://localhost:11434/v1' },
   { id: 'custom', label: 'Custom', baseUrl: '' },
 ];
+
+/** Turns a provider HTTP error into an actionable Arabic message that names the model. */
+export function explainHttpError(e: unknown, model: string): Error {
+  if (!(e instanceof HttpError)) return e instanceof Error ? e : new Error(String(e));
+  const m = `الموديل "${model}"`;
+  const tail = e.message.replace(/^فشل الطلب \(\d+\):\s*/, '').slice(0, 200);
+  const hint =
+    e.status === 404 ? `${m} مش متاح لحسابك أو الاسم غير صحيح (ظهوره في List models لا يعني أنه قابل للتشغيل). افتح الإعدادات ← List models ← «اختبار الظاهر» واختار موديل حالته 200.`
+    : e.status === 401 || e.status === 403 ? 'مفتاح الـ API غير صحيح أو ما عندوش صلاحية لهذا الموديل. راجع المفتاح في الإعدادات.'
+    : e.status === 429 ? 'وصلت حد الاستخدام عند المزود. استنى شوية أو غيّر الموديل.'
+    : e.status === 400 ? `${m} رفض الطلب (غالبًا الاسم أو حجم الرد المسموح). جرّب موديل آخر أو قلّل أقصى توكنز.`
+    : `المزود رجّع ${e.status}.`;
+  return new Error(`${hint}\n(${e.status}) ${tail}`);
+}
