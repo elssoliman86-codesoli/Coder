@@ -121,7 +121,7 @@ export function securityScan(files: ProjectFile[], type: ProjectType): Finding[]
       out.push({ file: f.path, message: 'ملف حساس لا يجب أن يُنشر', severity: 'critical' });
     }
   }
-  if ((type === 'website' || type === 'apk') && !files.some((f) => /Content-Security-Policy/i.test(f.content))) {
+  if ((type === 'website' || type === 'apk' || type === 'webapp') && !files.some((f) => /Content-Security-Policy/i.test(f.content))) {
     out.push({ file: 'index.html', message: 'لا توجد سياسة CSP (Content-Security-Policy) في الصفحة', severity: 'low' });
   }
   return out;

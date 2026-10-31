@@ -1,3 +1,5 @@
+import type { ProjectType } from '../types';
+
 export interface LangMeta {
   id: string;
   label: string;
@@ -25,6 +27,17 @@ export const LANGS: Record<string, LangMeta> = {
   yaml: { id: 'yaml', label: 'YAML', glyph: 'Ym', color: '#ef4444' },
   markdown: { id: 'markdown', label: 'Markdown', glyph: 'Md', color: '#94a3b8' },
   text: { id: 'text', label: 'Text', glyph: 'Tx', color: '#94a3b8' },
+  ruby: { id: 'ruby', label: 'Ruby', glyph: 'Rb', color: '#dc2626' },
+  swift: { id: 'swift', label: 'Swift', glyph: 'Sw', color: '#fb923c' },
+  lua: { id: 'lua', label: 'Lua', glyph: 'Lu', color: '#2563eb' },
+  perl: { id: 'perl', label: 'Perl', glyph: 'Pl', color: '#0ea5e9' },
+  r: { id: 'r', label: 'R', glyph: 'R', color: '#2563eb' },
+  scala: { id: 'scala', label: 'Scala', glyph: 'Sc', color: '#ef4444' },
+  haskell: { id: 'haskell', label: 'Haskell', glyph: 'Hs', color: '#8b5cf6' },
+  elixir: { id: 'elixir', label: 'Elixir', glyph: 'Ex', color: '#a855f7' },
+  julia: { id: 'julia', label: 'Julia', glyph: 'Jl', color: '#22c55e' },
+  vue: { id: 'vue', label: 'Vue', glyph: 'Vu', color: '#22c55e' },
+  svelte: { id: 'svelte', label: 'Svelte', glyph: 'Sv', color: '#f97316' },
 };
 
 const EXT: Record<string, string> = {
@@ -33,6 +46,7 @@ const EXT: Record<string, string> = {
   go: 'go', rs: 'rust', c: 'cpp', h: 'cpp', cc: 'cpp', cpp: 'cpp', hpp: 'cpp', php: 'php', html: 'html', htm: 'html',
   css: 'css', scss: 'css', sh: 'shell', bash: 'shell', ps1: 'shell', bat: 'shell', sql: 'sql', json: 'json',
   yml: 'yaml', yaml: 'yaml', md: 'markdown', txt: 'text', xml: 'text', toml: 'text',
+  rb: 'ruby', swift: 'swift', lua: 'lua', pl: 'perl', r: 'r', scala: 'scala', hs: 'haskell', ex: 'elixir', exs: 'elixir', jl: 'julia', vue: 'vue', svelte: 'svelte', mdx: 'markdown',
 };
 
 export function languageOf(path: string): string {
@@ -61,9 +75,16 @@ export function primaryLanguage(paths: string[]): string {
   return paths.some((p) => languageOf(p) === 'css') ? 'html' : 'text';
 }
 
-export function detectProjectType(paths: string[]): 'website' | 'apk' | 'cli' | 'exe' | 'library' {
+export function detectProjectType(paths: string[], files: { path: string; content: string }[] = []): ProjectType {
   const has = (re: RegExp) => paths.some((p) => re.test(p));
+  let deps = '';
+  const pkg = files.find((f) => /(^|\/)package\.json$/.test(f.path));
+  if (pkg) { try { const j = JSON.parse(pkg.content); deps = Object.keys({ ...j.dependencies, ...j.devDependencies }).join(' '); } catch { /* ignore */ } }
   if (has(/(^|\/)AndroidManifest\.xml$/) || has(/(^|\/)capacitor\.config\./) || has(/(^|\/)pubspec\.yaml$/)) return 'apk';
+  if (has(/(^|\/)next\.config\./) || /\b(next|react|vue|svelte|@angular\/core|solid-js|preact)\b/.test(deps) || has(/\.(jsx|tsx|vue|svelte)$/)) return 'webapp';
+  const serverDeps = /\b(express|fastify|koa|@nestjs\/core|hono)\b/.test(deps);
+  const serverFiles = has(/(^|\/)(manage\.py|go\.mod|Cargo\.toml|pom\.xml|composer\.json|Gemfile)$/) && !has(/(^|\/)(main|cli|__main__)\.(py|go|rs)$/) && !has(/index\.html$/);
+  if (serverDeps || serverFiles) return 'backend';
   if (has(/(^|\/)index\.html$/)) return 'website';
   if (has(/\.(csproj|sln)$/) || has(/(^|\/)tauri\.conf\.json$/)) return 'exe';
   if (has(/(^|\/)(main|cli|__main__)\.(py|go|rs|js|ts)$/)) return 'cli';

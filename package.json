@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "e2e": "node scripts/e2e.mjs",
+    "e2e:preview": "node scripts/e2e-preview.mjs",
     "mock-llm": "node scripts/mock-llm.mjs",
     "cap:sync": "cap sync android"
   },

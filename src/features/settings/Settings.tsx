@@ -343,7 +343,7 @@ function SkillsTab() {
       <div className="filters">
         <input className="input" placeholder="بحث في المهارات…" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" value={type} onChange={(e) => setType(e.target.value)} aria-label="applies_to">
-          {['all', 'website', 'apk', 'cli', 'exe', 'library'].map((x) => <option key={x} value={x}>{x === 'all' ? 'كل الأنواع' : x}</option>)}
+          {['all', 'website', 'webapp', 'backend', 'apk', 'cli', 'exe', 'library'].map((x) => <option key={x} value={x}>{x === 'all' ? 'كل الأنواع' : x}</option>)}
         </select>
         <button className="btn" onClick={() => setEdit({ name: '', description: '', appliesTo: ['website'], triggers: [], always: false, enabled: true, builtin: false, body: '' })} data-testid="add-skill"><Icon name="plus" size={16} /> مهارة</button>
         <button className="btn" onClick={() => file.current?.click()}><Icon name="upload" size={16} /> استيراد skills.md</button>
@@ -432,6 +432,9 @@ function AboutTab() {
             <input className="input" type="number" min={0} max={1} step={0.1} value={settings.temperature} onChange={(e) => setState((s) => { s.settings = { ...s.settings, temperature: Math.min(1, Math.max(0, Number(e.target.value))) }; })} />
           </Field>
         </div>
+        <Field label="Runner لتشغيل Go / Rust / Java / C++ / PHP… (Piston API)" hint="الكود بيتبعت للخدمة دي لما تضغط تشغيل. ممكن تستضيف Piston بنفسك وتحط رابطه هنا. سيبه فاضي لإيقاف التشغيل البعيد.">
+          <input className="input mono" dir="ltr" value={settings.runnerUrl} placeholder="https://…/api/v2/piston" data-testid="runner-url" onChange={(e) => setState((s) => { s.settings = { ...s.settings, runnerUrl: e.target.value.trim() }; })} />
+        </Field>
         <p className="muted small">على الأندرويد: لو المزود مالوش CORS، الطلب بيتحول تلقائيًا للشبكة الأصلية (من غير بث لايف للرد).</p>
       </section>
       <section className="card">

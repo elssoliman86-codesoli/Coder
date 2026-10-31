@@ -86,6 +86,47 @@ jobs:
           files: out/*.apk
 `;
 
+export const PAGES_BUILD_WORKFLOW = `name: Build and deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /\${{ github.event.repository.name }}
+      - id: out
+        run: |
+          for d in dist build out; do
+            if [ -d "$d" ]; then echo "dir=$d" >> "$GITHUB_OUTPUT"; exit 0; fi
+          done
+          echo "No dist/, build/ or out/ folder after the build (Next.js needs output: 'export')." && exit 1
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: \${{ steps.out.outputs.dir }}
+      - id: deployment
+        uses: actions/deploy-pages@v4
+`;
+
 export const EXE_PY_WORKFLOW = `name: Build EXE
 on:
   push:
@@ -182,6 +223,10 @@ export function workflowsFor(p: Project): WorkflowFile[] {
   switch (p.type) {
     case 'website':
       return [{ path: '.github/workflows/pages.yml', content: PAGES_WORKFLOW, triggersBuild: true }];
+    case 'webapp':
+      return [{ path: '.github/workflows/pages.yml', content: PAGES_BUILD_WORKFLOW, triggersBuild: true }];
+    case 'backend':
+      return [{ path: '.github/workflows/package.yml', content: fill(CLI_WORKFLOW, vars), triggersBuild: true }];
     case 'apk':
       return [{ path: '.github/workflows/build-apk.yml', content: fill(APK_WORKFLOW, vars), triggersBuild: true }];
     case 'exe':

@@ -160,3 +160,12 @@ textarea.input { resize: vertical; }
 .side-scrim { position: fixed; inset: 0; z-index: 44; background: rgba(0,0,0,.5); }
 @keyframes slide-left { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .log-error { white-space: pre-wrap; max-height: 30vh; overflow: auto; }
+
+/* fullscreen preview (CSS-based so the iframe is never remounted) */
+.ws-preview.full { position: fixed; inset: 0; z-index: 60; background: var(--bg); border: 0; padding-top: env(safe-area-inset-top); }
+.preview-note { margin: 0; padding: 4px 12px; }
+.plan summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.plan details { border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; background: var(--surface); }
+.plan ul { margin: 4px 0; padding-inline-start: 20px; }
+.plan-files > li { margin-bottom: 8px; }
+.swatch { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; } .swatch i { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }

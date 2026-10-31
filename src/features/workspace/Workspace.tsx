@@ -10,6 +10,7 @@ import { FileTree } from './FileTree';
 import { Preview, type PreviewHandle } from './Preview';
 import { PromptBar } from './PromptBar';
 import { PublishModal, DetailsModal } from './Publish';
+import { PlanModal } from './PlanView';
 import { ReviewPopover, useReview } from './Review';
 import { basename } from '../../lib/lang';
 
@@ -47,6 +48,9 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   const [showPreview, setShowPreview] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [full, setFull] = useState(false);
+  useEscape(() => setFull(false), full);
   const preview = useRef<PreviewHandle>(null);
   const review = useReview(id, preview);
 
@@ -56,7 +60,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
 
   // Follow the file being written live.
   useEffect(() => {
-    if (!following) return;
+    if (!following || following === 'PLAN.json') return;
     setActive(following);
     setOpen((o) => (o.includes(following) ? o : [...o, following]));
   }, [following]);
@@ -120,6 +124,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
               </select>
             </label>
             <button className={showPreview ? 'btn on block' : 'btn block'} onClick={togglePreview} disabled={!canPreview || (working && !showPreview)} data-testid="preview-btn"><Icon name="play" size={16} /> {t('preview')}</button>
+            <button className="btn block" onClick={() => { closeSidebar(); setPlanOpen(true); }} data-testid="plan-btn"><Icon name="list" size={16} /> الخطة{project.plan ? ` (${project.plan.files.length})` : ''}</button>
             <section className="card files-card" aria-label={t('filesCard')} data-ui="card">
               <h3 className="card-title">{t('filesCard')} <span className="badge">{files.length}</span></h3>
               <FileTree paths={files.map((f) => f.path)} planned={planned} active={active} live={following ? [following] : []} onSelect={openFile} />
@@ -132,8 +137,8 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
 
         <main className="ws-main">
           {showPreview && (
-            <div className="ws-preview">
-              <Preview ref={preview} project={project} onClose={() => setShowPreview(false)} onWindowEnd={() => review.onWindowEnd()} disabled={review.phase === 'fixing'} />
+            <div className={full ? 'ws-preview full' : 'ws-preview'} data-testid="ws-preview">
+              <Preview ref={preview} project={project} full={full} onToggleFull={() => setFull(!full)} onClose={() => { setShowPreview(false); setFull(false); }} onWindowEnd={() => review.onWindowEnd()} disabled={review.phase === 'fixing'} />
               {review.note && <div className="review-note" role="status" data-testid="review-note"><Spinner /> {review.note}</div>}
               <ReviewPopover project={project} phase={review.phase} issues={preview.current?.issues().length ?? 0}
                 onContinue={review.keepWatching} onAnother={review.anotherEdit} onDone={review.done}
@@ -165,6 +170,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
 
       <PromptBar project={project} disabled={project.status === 'planning' || project.status === 'coding'} />
       {publishOpen && <PublishModal project={project} onClose={() => setPublishOpen(false)} onOpenSettings={onOpenSettings} />}
+      {planOpen && <PlanModal project={project} onClose={() => setPlanOpen(false)} onOpenFile={openFile} />}
       {detailsOpen && <DetailsModal project={project} onClose={() => setDetailsOpen(false)} />}
     </div>
   );

@@ -105,7 +105,14 @@ export async function planProject(ctx: RunCtx): Promise<Plan> {
   let lastErrors: string[] = [];
   for (let attempt = 0; attempt < 3; attempt++) {
     throwIfAborted(ctx.signal);
-    const reply = await ctx.chat('planner', messages);
+    let acc = '';
+    ctx.draft('PLAN.json', '');
+    let reply: string;
+    try {
+      reply = await ctx.chat('planner', messages, (t) => { acc += t; ctx.draft('PLAN.json', acc); });
+    } finally {
+      ctx.draft('PLAN.json', null);
+    }
     try {
       const { plan: first, errors } = validatePlan(extractJson(reply));
       let plan = first;
@@ -182,7 +189,7 @@ export async function generateProject(ctx: RunCtx): Promise<void> {
   p = ctx.getProject();
   const extra: ProjectFile[] = [];
   if (p.planMd) extra.push({ path: 'PLAN.md', content: p.planMd });
-  if (p.type === 'website' || p.type === 'apk' || p.type === 'exe') extra.push({ path: 'design-notes.md', content: buildDesignNotes(plan, vocab.terms, plan.design.style) });
+  if (p.type === 'website' || p.type === 'webapp' || p.type === 'apk' || p.type === 'exe') extra.push({ path: 'design-notes.md', content: buildDesignNotes(plan, vocab.terms, plan.design.style) });
   for (const e of extra) ctx.commitFile(e.path, e.content);
   const issues = analyzeProject(ctx.getProject().files).filter((i) => i.severity === 'high' || i.severity === 'critical');
   ctx.patch((x) => { x.status = 'ready'; x.primaryLanguage = primaryLanguage(x.files.map((f) => f.path)); });

@@ -1,4 +1,5 @@
-export type ProjectType = 'website' | 'apk' | 'cli' | 'exe' | 'library';
+/** website = static HTML; webapp = framework app (React/Next/Vue…); backend = API/server; apk = mobile app; exe = desktop program. */
+export type ProjectType = 'website' | 'webapp' | 'backend' | 'apk' | 'cli' | 'exe' | 'library';
 export type Role = 'planner' | 'coder' | 'critic' | 'fixer' | 'expert';
 export const ROLES: Role[] = ['planner', 'coder', 'critic', 'fixer', 'expert'];
 
@@ -152,6 +153,8 @@ export interface Settings {
   /** 0 = let the provider decide. */
   maxOutputTokens: number;
   temperature: number;
+  /** Piston-compatible endpoint used to run languages that cannot run in the browser (Go, Rust, Java, C++, …). */
+  runnerUrl: string;
 }
 
 export interface AppState {
@@ -174,5 +177,5 @@ export const DEFAULT_STATE: AppState = {
   },
   userSkills: [],
   disabledSkills: [],
-  settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxOutputTokens: 0, temperature: 0.2 },
+  settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxOutputTokens: 0, temperature: 0.2, runnerUrl: 'https://emkc.org/api/v2/piston' },
 };

@@ -1,9 +1,12 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { Project } from '../../types';
 import { buildPreviewHtml, runJsInWorker } from '../../lib/preview';
+import { buildReactPreviewHtml } from '../../lib/react-preview';
+import { detectKind, type KindInfo } from '../../lib/preview-kind';
+import { runPython, runRemote, type Job } from '../../lib/runners';
+import { app } from '../../storage/store';
 import { mergeIssues, type ObservedIssue } from '../../agents/observer';
 import { Icon, ProgressRing } from '../../components/ui';
-import { languageOf } from '../../lib/lang';
 
 export interface AuditSnapshot {
   issues: ObservedIssue[];
@@ -24,18 +27,33 @@ interface Props {
   /** Called when an observation window ends. */
   onWindowEnd: (s: AuditSnapshot) => void;
   disabled?: boolean;
+  full?: boolean;
+  onToggleFull?: () => void;
 }
 
-const WEB = new Set(['website', 'apk', 'exe']);
-
-export const Preview = forwardRef<PreviewHandle, Props>(function Preview({ project, onClose, onWindowEnd, disabled }, ref) {
-  const isWeb = WEB.has(project.type) && project.files.some((f) => f.path.endsWith('.html'));
-  return isWeb
-    ? <WebPreview ref={ref} project={project} onClose={onClose} onWindowEnd={onWindowEnd} disabled={disabled} />
-    : <TerminalPreview project={project} onClose={onClose} />;
+export const Preview = forwardRef<PreviewHandle, Props>(function Preview(props, ref) {
+  const { project } = props;
+  const info = useMemo(() => detectKind(project.files, project.type, project.primaryLanguage), [project.files, project.type, project.primaryLanguage]);
+  if (info.kind === 'html' || info.kind === 'react' || info.kind === 'next') return <WebPreview ref={ref} {...props} info={info} />;
+  if (info.kind === 'python' || info.kind === 'node' || info.kind === 'remote') return <TerminalPreview project={project} info={info} onClose={props.onClose} full={props.full} onToggleFull={props.onToggleFull} />;
+  return <NoticePreview info={info} onClose={props.onClose} full={props.full} onToggleFull={props.onToggleFull} />;
 });
 
-const WebPreview = forwardRef<PreviewHandle, Props>(function WebPreview({ project, onClose, onWindowEnd, disabled }, ref) {
+function FullButton({ full, onToggle }: { full?: boolean; onToggle?: () => void }) {
+  if (!onToggle) return null;
+  return <button className="icon-btn" aria-label={full ? 'exit fullscreen' : 'fullscreen'} aria-pressed={!!full} onClick={onToggle} data-testid="fullscreen-btn"><Icon name={full ? 'shrink' : 'expand'} size={16} /></button>;
+}
+
+function NoticePreview({ info, onClose, full, onToggleFull }: { info: KindInfo; onClose: () => void; full?: boolean; onToggleFull?: () => void }) {
+  return (
+    <div className="preview" data-testid="preview">
+      <div className="preview-bar"><strong>Preview</strong><span className="badge">{info.label}</span><span className="spacer" /><FullButton full={full} onToggle={onToggleFull} /><button className="icon-btn" aria-label="close preview" onClick={onClose}><Icon name="close" size={18} /></button></div>
+      <div className="preview-stage"><p className="muted center" style={{ maxWidth: 520, padding: 16 }} data-testid="preview-note">{info.note}</p></div>
+    </div>
+  );
+}
+
+const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo }>(function WebPreview({ project, onClose, onWindowEnd, disabled, info, full, onToggleFull }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [nonce, setNonce] = useState(0);
   const [device, setDevice] = useState<'phone' | 'tablet' | 'desktop'>(project.type === 'apk' ? 'phone' : 'desktop');
@@ -49,7 +67,8 @@ const WebPreview = forwardRef<PreviewHandle, Props>(function WebPreview({ projec
   const filesRef = useRef(project.files);
   filesRef.current = project.files;
 
-  const built = useMemo(() => buildPreviewHtml(project.files, { observer: true }), [project.files, nonce]);
+  const slow = info.kind !== 'html';
+  const built = useMemo(() => (info.kind === 'html' ? buildPreviewHtml(project.files, { observer: true }) : buildReactPreviewHtml(project.files, info.kind as 'react' | 'next', { observer: true })), [project.files, nonce, info.kind]);
   useEffect(() => () => built.revoke(), [built]);
 
   // Receive audit messages from the sandboxed iframe.
@@ -94,7 +113,7 @@ const WebPreview = forwardRef<PreviewHandle, Props>(function WebPreview({ projec
       new Promise<AuditSnapshot>((resolve) => {
         issuesRef.current = [];
         setIssues([]);
-        const t = setTimeout(() => { waiter.current = null; resolve({ issues: issuesRef.current, bodyText: bodyRef.current }); }, 20_000);
+        const t = setTimeout(() => { waiter.current = null; resolve({ issues: issuesRef.current, bodyText: bodyRef.current }); }, slow ? 60_000 : 20_000);
         waiter.current = (s) => { clearTimeout(t); resolve(s); };
         setNonce((n) => n + 1);
       }),
@@ -109,12 +128,13 @@ const WebPreview = forwardRef<PreviewHandle, Props>(function WebPreview({ projec
     <div className="preview" data-testid="preview">
       <div className="preview-bar">
         <strong>Preview</strong>
-        <span className="badge">{project.type === 'apk' ? 'Runtime (نسخة ويب للتطبيق)' : 'Website'}</span>
+        <span className="badge" title={info.note}>{info.label}</span>
         <div className="seg" role="group" aria-label="device">
           {(['phone', 'tablet', 'desktop'] as const).map((d) => <button key={d} className={device === d ? 'seg-b on' : 'seg-b'} onClick={() => setDevice(d)}>{d}</button>)}
         </div>
         <button className="icon-btn" aria-label="reload" onClick={() => { issuesRef.current = []; setIssues([]); setNonce((n) => n + 1); }}><Icon name="refresh" size={16} /></button>
         <span className="spacer" />
+        <FullButton full={full} onToggle={onToggleFull} />
         {remaining > 0 && <span className="observing" data-testid="observing"><ProgressRing value={total ? remaining / total : 0} size={30} label={String(remaining)} /> بيراقب…</span>}
         <span className={issues.length ? 'badge badge-warn' : 'badge badge-ok'} data-testid="issue-count">{issues.length} ملاحظة</span>
         <button className="icon-btn" aria-label="close preview" onClick={onClose}><Icon name="close" size={18} /></button>
@@ -131,25 +151,31 @@ const WebPreview = forwardRef<PreviewHandle, Props>(function WebPreview({ projec
   );
 });
 
-function TerminalPreview({ project, onClose }: { project: Project; onClose: () => void }) {
-  const entries = project.files.filter((f) => /\.(js|mjs|py|go|rs|sh)$/.test(f.path));
-  const main = entries.find((f) => /(^|\/)(main|index|cli|app)\.(js|mjs|py)$/.test(f.path)) ?? entries[0];
+function TerminalPreview({ project, info, onClose, full, onToggleFull }: { project: Project; info: KindInfo; onClose: () => void; full?: boolean; onToggleFull?: () => void }) {
+  const files = project.files;
+  const entries = files.filter((f) => (info.kind === 'python' ? /\.py$/.test(f.path) : info.kind === 'node' ? /\.(js|mjs|cjs)$/.test(f.path) : true));
+  const main = entries.find((f) => /(^|\/)(main|index|cli|app|__main__)\.[a-z]+$/.test(f.path)) ?? entries.find((f) => /if __name__ == ['"]__main__['"]/.test(f.content)) ?? entries[0];
   const [out, setOut] = useState<{ t: string; k: 'out' | 'err' }[]>([]);
   const [running, setRunning] = useState(false);
   const stopRef = useRef<(() => void) | null>(null);
-  const lang = main ? languageOf(main.path) : '';
+  const sentOk = useRef(false);
   useEffect(() => () => stopRef.current?.(), []);
 
   function run() {
     if (!main) return;
     setOut([]);
-    if (lang !== 'javascript') {
-      setOut([{ t: `${main.path}: معاينة ${lang || 'هذه اللغة'} محتاجة runner بعيد (Pyodide/Docker) — مش متضمن في النسخة دي. شغّل الملف على جهازك أو بعد النشر.`, k: 'err' }]);
-      return;
+    const emit = (t: string, k: 'out' | 'err') => setOut((o) => [...o, { t, k }]);
+    let job: Job;
+    if (info.kind === 'python') job = runPython(files, main.path, emit);
+    else if (info.kind === 'node') job = runJsInWorker(files, main.path, emit);
+    else {
+      const url = app.get().settings.runnerUrl;
+      if (!sentOk.current && !window.confirm(`الكود هيتبعت لخدمة تشغيل خارجية (${url ? new URL(url).host : 'غير محددة'}) عشان يتنفذ. تكمّل؟`)) return;
+      sentOk.current = true;
+      job = runRemote(url, files, info.remoteLang!, emit);
     }
-    setRunning(true);
-    const job = runJsInWorker(project.files, main.path, (t, k) => setOut((o) => [...o, { t, k }]));
     stopRef.current = job.stop;
+    setRunning(true);
     void job.done.then(() => setRunning(false));
   }
 
@@ -157,11 +183,14 @@ function TerminalPreview({ project, onClose }: { project: Project; onClose: () =
     <div className="preview" data-testid="preview">
       <div className="preview-bar">
         <strong>Terminal</strong>
+        <span className="badge" title={info.note}>{info.label}</span>
         <span className="badge mono" dir="ltr">{main?.path ?? '—'}</span>
         <span className="spacer" />
+        <FullButton full={full} onToggle={onToggleFull} />
         {running ? <button className="btn sm danger" onClick={() => stopRef.current?.()}>إيقاف</button> : <button className="btn sm primary" onClick={run} disabled={!main} data-testid="run-cli"><Icon name="play" size={14} /> تشغيل</button>}
         <button className="icon-btn" aria-label="close preview" onClick={onClose}><Icon name="close" size={18} /></button>
       </div>
+      {info.note && <p className="muted small preview-note">{info.note}</p>}
       <pre className="terminal mono" dir="ltr" data-testid="terminal">{out.length ? out.map((l, i) => <div key={i} className={l.k === 'err' ? 'term-err' : ''}>{l.t}</div>) : <span className="muted">$ اضغط «تشغيل»</span>}</pre>
     </div>
   );

@@ -6,7 +6,7 @@ import { langMeta } from '../../lib/lang';
 import type { Project } from '../../types';
 import { NewProjectDialog } from './NewProject';
 
-const TYPE_LABEL: Record<string, string> = { website: 'Website', apk: 'APK', cli: 'CLI', exe: 'EXE', library: 'Library' };
+const TYPE_LABEL: Record<string, string> = { website: 'Website', webapp: 'Web app', backend: 'Backend', apk: 'APK', cli: 'CLI', exe: 'EXE', library: 'Library' };
 
 function ProjectCard({ p, onOpen }: { p: Project; onOpen: () => void }) {
   const t = useT();

@@ -81,7 +81,7 @@ export function PublishModal({ project, onClose, onOpenSettings }: { project: Pr
               </select>
             </Field>
           </div>
-          <p className="muted small">الخبير هيعمل: code review وتنظيف، فحص ثغرات، README. النشر بيكمل بس لو التقييم 10/10. بعدها بيتبني حسب النوع: {project.type === 'website' ? 'استضافة GitHub Pages' : project.type === 'apk' ? 'APK في Release' : project.type === 'exe' ? 'ملف exe في Release' : 'حزمة في Release'}.</p>
+          <p className="muted small">الخبير هيعمل: code review وتنظيف، فحص ثغرات، README. النشر بيكمل بس لو التقييم 10/10. بعدها بيتبني حسب النوع: {(project.type === 'website' || project.type === 'webapp') ? 'استضافة GitHub Pages' : project.type === 'apk' ? 'APK في Release' : project.type === 'exe' ? 'ملف exe في Release' : 'حزمة في Release'}.</p>
         </div>
       )}
       {step && (

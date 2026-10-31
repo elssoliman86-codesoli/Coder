@@ -1,8 +1,8 @@
 export const PLAN_SCHEMA = `{
   "summary": "what the product is, in the language of the description",
   "targetUsers": "who uses it",
-  "type": "website | apk | cli | exe | library",
-  "primaryLanguage": "javascript | typescript | python | go | rust | dart | kotlin | java | csharp | php | html ...",
+  "type": "website | webapp | backend | apk | cli | exe | library",
+  "primaryLanguage": "any language the product needs: javascript | typescript | python | go | rust | java | kotlin | csharp | cpp | c | php | ruby | swift | dart | lua | r | scala | ... (lowercase)",
   "stack": [{ "category": "language|framework|database|tooling|testing", "choice": "", "version": "latest unless you can verify one", "reason": "" }],
   "files": [{ "path": "relative/path.ext", "purpose": "one sentence" }],
   "functions": [{ "file": "path from files", "name": "", "signature": "name(params): returns", "description": "inputs, outputs, errors, which functions it calls" }],
@@ -19,7 +19,8 @@ Analyse the user's description completely and produce ONE detailed engineering p
 ${PLAN_SCHEMA}
 Rules:
 - The plan must be complete: every file the product needs and EVERY function/class needed in each file (signature + what it calls). Another model will write each file from this plan alone.
-- websites and apk targets use index.html as the entry point (apk = a mobile-first web app wrapped by Capacitor).
+- Infer the project TYPE and the LANGUAGE/FRAMEWORK from the description yourself; never ask the user. Types: website = static HTML/CSS/JS (entry index.html); webapp = a framework app that needs a build (React, Next.js, Vue, Svelte… — include package.json with scripts and dependencies; Vite-style React apps also keep index.html + src/main.jsx; Next.js uses app/ or pages/); backend = API/server (any language); apk = mobile app (a mobile-first web app wrapped by Capacitor, entry index.html); cli = command-line tool/script (any language); exe = desktop program; library = reusable package.
+- Use the language the user asked for. If they named none, pick the best fit (Python for data/automation/scripts, TypeScript/React for rich web apps, Go/Rust for fast CLIs, …).
 - Never invent library versions. Use "latest" when you cannot verify.
 - Prefer the platform's built-in APIs; add a dependency only when it clearly earns its place.
 - All paths are relative, use forward slashes, no "..".

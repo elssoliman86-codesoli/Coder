@@ -25,6 +25,8 @@ export interface PublishOptions {
 
 const TOPICS: Record<string, string[]> = {
   website: ['website', 'github-pages'],
+  webapp: ['webapp', 'github-pages'],
+  backend: ['backend', 'api'],
   apk: ['android', 'apk', 'capacitor'],
   cli: ['cli'],
   exe: ['desktop', 'windows'],
@@ -91,7 +93,7 @@ export async function publishProject(ctx: RunCtx, gh: GithubClient, opts: Publis
     log(`تم إنشاء الريبو ${created.full_name}`, 'ok');
   }
 
-  if (p.type === 'website') {
+  if (p.type === 'website' || p.type === 'webapp') {
     step('pages');
     try {
       const r = await gh.enablePages(owner, repoName);
@@ -125,8 +127,8 @@ export async function publishProject(ctx: RunCtx, gh: GithubClient, opts: Publis
   step('details');
   let pagesUrl: string | undefined;
   let artifactUrl: string | undefined;
-  if (p.type === 'website') pagesUrl = (await gh.pagesUrl(owner, repoName).catch(() => null)) ?? `https://${owner}.github.io/${repoName}/`;
-  if (p.type === 'apk' || p.type === 'exe' || p.type === 'cli') {
+  if (p.type === 'website' || p.type === 'webapp') pagesUrl = (await gh.pagesUrl(owner, repoName).catch(() => null)) ?? `https://${owner}.github.io/${repoName}/`;
+  if (p.type === 'apk' || p.type === 'exe' || p.type === 'cli' || p.type === 'backend') {
     const rel = await gh.latestRelease(owner, repoName).catch(() => null);
     artifactUrl = rel?.assets[0]?.url ?? rel?.url;
   }

@@ -49,7 +49,7 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
     const paths = files.map((f) => f.path);
     const now = Date.now();
     const project: Project = {
-      id, name: name.trim(), description: desc.trim(), type: paths.length ? detectProjectType(paths) : 'website',
+      id, name: name.trim(), description: desc.trim(), type: paths.length ? detectProjectType(paths, files) : 'website',
       primaryLanguage: paths.length ? primaryLanguage(paths) : 'html', files, status: 'new', style: 'Minimalism', queue: [],
       importedFrom: source || undefined, createdAt: now, updatedAt: now, reviewCycles: 0,
     };

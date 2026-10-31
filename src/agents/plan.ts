@@ -1,7 +1,7 @@
 import type { Plan, ProjectType } from '../types';
 import { safeRelPath } from './parse';
 
-const TYPES: ProjectType[] = ['website', 'apk', 'cli', 'exe', 'library'];
+const TYPES: ProjectType[] = ['website', 'webapp', 'backend', 'apk', 'cli', 'exe', 'library'];
 const MAX_FILES = 40;
 
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : v == null ? d : String(v));
@@ -34,6 +34,7 @@ export function validatePlan(raw: unknown): PlanValidation {
   if (files.length === 0) errors.push('files فاضية — لازم قائمة ملفات كاملة');
   if (files.length > MAX_FILES) errors.push(`عدد الملفات (${files.length}) أكبر من الحد ${MAX_FILES}`);
   if (type === 'website' && !seen.has('index.html')) errors.push('المواقع لازم يكون فيها index.html');
+  if (type === 'webapp' && !seen.has('package.json')) errors.push('تطبيقات الويب (webapp) لازم يكون فيها package.json (scripts: dev/build) و dependencies');
   if (type === 'apk' && !seen.has('index.html')) errors.push('تطبيقات الـ apk (Capacitor) لازم يكون فيها index.html كنقطة دخول');
 
   const functions = arr(o.functions)

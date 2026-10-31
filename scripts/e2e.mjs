@@ -91,6 +91,22 @@ await step('preview: observer detects flaws, one-pass fix, then review popover',
   await T('review-popover').waitFor({ state: 'hidden' });
 });
 
+await step('plan view is clickable and fullscreen preview toggles', async () => {
+  await T('plan-btn').click();
+  await T('plan-view').waitFor();
+  await T('plan-view').getByText('style.css').first().waitFor();
+  await shot('05b-plan');
+  await page.keyboard.press('Escape');
+  await T('plan-view').waitFor({ state: 'hidden' });
+  await T('fullscreen-btn').click();
+  await page.waitForSelector('[data-testid=ws-preview].full');
+  const box = await T('ws-preview').boundingBox();
+  if (!box || box.width < 1200 || box.height < 800) throw new Error('preview is not fullscreen: ' + JSON.stringify(box));
+  await shot('05c-fullscreen');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid=ws-preview]:not(.full)');
+});
+
 await step('edit queue: prompt is applied and can be undone', async () => {
   await T('prompt-input').fill('ضيف سطر يقول تم التعديل');
   await T('prompt-send').click();
