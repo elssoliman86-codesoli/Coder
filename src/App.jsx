@@ -114,7 +114,27 @@ function App(){
       setLogs(l=>[...l,{type:'agent',text:result.summary||'Task completed. Review the generated changes.'}]);flash('Agent task completed.');
     }catch(e){const message=e instanceof TypeError?'Network/CORS error: this provider does not allow direct browser requests. Enable CORS at the provider or connect a compatible backend proxy.':e.message;setLogs(l=>[...l,{type:'error',text:message}]);}finally{setQueue(q=>q.slice(1));setRunning(false)}};run()},[queue,running,provider,model,active,files,skillText]);
 
-  function createProject(){if(!newName.trim()||!newDesc.trim()){flash('Enter a project name and description.');return;}const p={id:`p${Date.now()}`,name:newName,description:newDesc,language:projectKind==='Mobile App'?'React Native':projectKind==='CLI'?'Python':'React',kind:projectKind,files:0,updated:'Just created',color:'green'};setProjects(x=>[p,...x]);setActive(p);setFiles(initialFiles);setSelected('src/App.jsx');setPlan({title:'Project understanding',summary:'The agent will analyze the brief, select an architecture, and prepare an implementation plan.',steps:['Clarify requirements and acceptance criteria','Choose stack and project structure','Implement core features','Run checks and review the preview']});setNewProject(false);setNewName('');setNewDesc('');setPreview(false);flash('Project workspace created. Describe the first implementation task.');}
+  function createProject(){
+    if(!newName.trim()||!newDesc.trim()){flash('Enter a project name and description.');return;}
+    const name=newName.trim(),description=newDesc.trim();
+    const p={id:`p${Date.now()}`,name,description,language:projectKind==='Mobile App'?'React Native':projectKind==='CLI'?'Python':'React',kind:projectKind,files:0,updated:'Just created',color:'green'};
+    const brief=`Create the project from scratch based on this brief.\n\nProject: ${name}\nType: ${projectKind}\nRequirements: ${description}\n\nFirst inspect the starter files, then implement a working first version. Create or update all necessary source/configuration files. Do not only return a plan or explanation: write the actual code. Include a concise summary and a step-by-step plan in the required JSON response.`;
+    const task={id:Date.now()+Math.random(),text:brief,status:'queued'};
+    setProjects(x=>[p,...x]);
+    setActive(p);
+    setFiles(initialFiles);
+    setSelected('src/App.jsx');
+    setQueue(q=>[...q,task]);
+    setLogs([{type:'system',text:`Project "${name}" created. Initial implementation task queued.`},{type:'user',text:brief}]);
+    setActiveTab('agent');
+    setPlan({title:'Initial implementation',summary:'The project brief has been sent to the selected AI model. Waiting for its implementation response.',steps:['Analyze the project brief','Design the initial structure','Implement the first working version','Review generated files']});
+    setNewProject(false);
+    setNewName('');
+    setNewDesc('');
+    setPreview(false);
+    setMobileMenu(false);
+    flash('Project created. Initial implementation has been queued for the agent.');
+  }
   async function publishProject(){if(!github.token){setSettings(true);flash('Add a GitHub token first.');return;}setPublishing(true);try{const repoName=active.name.toLowerCase().replace(/[^a-z0-9_.-]+/g,'-').replace(/^-|-$/g,'')||'onebyte-project';const r=await fetch(`${API}/api/github/publish`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:github.token,owner:github.owner||undefined,repo_name:repoName,description:active.description,files})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'GitHub publish failed');setPublished(d);setLogs(l=>[...l,{type:'agent',text:`Published ${d.repository} (${d.files_uploaded} files).` }]);flash('Project pushed to GitHub.');}catch(e){flash(e.message)}finally{setPublishing(false)}}
   async function runReview(){if(!provider.apiKey){flash('Configure provider first.');return;}setReview({status:'running',score:null,items:[]});try{const r=await fetch(`${API}/api/agent/review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_url:provider.baseUrl,api_key:provider.apiKey,model:reviewModel,project:{name:active.name,description:active.description,files}})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Review failed');setReview({status:'done',...d});}catch(e){setReview({status:'error',error:e.message})}}
   async function importFiles(fileList){const incoming=Array.from(fileList||[]);if(!incoming.length)return;const next={};try{for(const file of incoming){if(file.name.toLowerCase().endsWith('.zip')){const zip=await JSZip.loadAsync(file);for(const [path,item] of Object.entries(zip.files)){if(item.dir||path.startsWith('__MACOSX/'))continue;const clean=path.replace(/\\/g,'/');if(clean.split('/').includes('..'))continue;next[clean]=await item.async('string');}}else{const clean=file.webkitRelativePath||file.name;if(clean.split('/').includes('..'))continue;next[clean]=await file.text();}}if(Object.keys(next).length){setFiles(f=>({...f,...next}));setSelected(Object.keys(next)[0]);flash(`${Object.keys(next).length} file(s) imported.`)}}catch(e){flash(`Import failed: ${e.message}`)}}
