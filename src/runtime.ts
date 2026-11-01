@@ -55,9 +55,19 @@ export function log(id: string, msg: string, kind: LogLine['kind'] = 'info') {
 // latest text, so every character is shown and the UI never falls behind or janks.
 const pendingDraft = new Map<string, { id: string; path: string; text: string }>();
 let draftTimer: ReturnType<typeof setTimeout> | null = null;
+const draftStart = new Map<string, number>();
+const MIN_LIVE_MS = 150; // even a very fast model's file is visible as "live" long enough to see it
 function setDraft(id: string, path: string, text: string | null) {
   const key = id + '\0' + path;
-  if (text === null) { pendingDraft.delete(key); applyDraft(id, path, null); return; }
+  if (text === null) {
+    pendingDraft.delete(key);
+    const wait = MIN_LIVE_MS - (Date.now() - (draftStart.get(key) ?? 0));
+    draftStart.delete(key);
+    if (wait > 0 && app.get().projects[id]) setTimeout(() => { if (!draftStart.has(key)) applyDraft(id, path, null); }, wait);
+    else applyDraft(id, path, null);
+    return;
+  }
+  if (!draftStart.has(key)) { draftStart.set(key, Date.now()); applyDraft(id, path, text); return; }
   pendingDraft.set(key, { id, path, text });
   if (!draftTimer) draftTimer = setTimeout(flushDrafts, 16);
 }
