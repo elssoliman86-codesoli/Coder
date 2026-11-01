@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { highlight } from '../../lib/highlight';
 import { languageOf } from '../../lib/lang';
 import { Icon } from '../../components/ui';
+import { diffLines, diffStats } from '../../lib/diff';
 
 /** Latest value, committed at most once per animation frame (keeps streaming smooth on mid-range phones). */
 function useRafValue<T>(value: T): T {
@@ -23,9 +24,13 @@ interface Props {
   /** Text currently being streamed into this file (live writing), if any. */
   draft?: string;
   onSave: (content: string) => void;
+  /** Content before the AI's pending changes (null = new file). Undefined = nothing pending for this file. */
+  base?: string | null;
 }
 
-export function Editor({ path, content, draft, onSave }: Props) {
+export function Editor({ path, content, draft, onSave, base }: Props) {
+  const [view, setView] = useState<'diff' | 'code'>('diff');
+  useEffect(() => { setView('diff'); }, [path]);
   const live = draft !== undefined;
   const [editing, setEditing] = useState(false);
   const [buf, setBuf] = useState(content);
@@ -42,6 +47,10 @@ export function Editor({ path, content, draft, onSave }: Props) {
   const lang = languageOf(path);
   const html = useMemo(() => highlight(text, lang), [text, lang]);
   const lines = text === '' ? 1 : text.split('\n').length;
+  const changed = base !== undefined && !live;
+  const showDiff = changed && view === 'diff' && !editing;
+  const dlines = useMemo(() => (showDiff ? diffLines(base ?? '', content, 4) : []), [showDiff, base, content]);
+  const dstat = useMemo(() => (changed ? diffStats(base ?? '', content) : { added: 0, removed: 0 }), [changed, base, content]);
 
   useEffect(() => {
     if (live && follow && !paused && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
@@ -52,7 +61,11 @@ export function Editor({ path, content, draft, onSave }: Props) {
       <div className="editor-bar">
         <span className="editor-path mono" dir="ltr">{path}</span>
         {live && <span className="live-badge" data-testid="live-badge"><span className="live-dot" /> بيكتب لايف</span>}
+        {changed && <span className="tree-diff" dir="ltr"><span className="diff-add">+{dstat.added}</span><span className="diff-del">−{dstat.removed}</span></span>}
         <span className="spacer" />
+        {changed && !editing && (
+          <button className="btn sm" onClick={() => setView(view === 'diff' ? 'code' : 'diff')} data-testid="diff-toggle">{view === 'diff' ? 'الكود كامل' : 'عرض التغييرات'}</button>
+        )}
         {live ? (
           <>
             <button className={follow ? 'btn sm on' : 'btn sm'} onClick={() => setFollow(!follow)} aria-pressed={follow}>متابعة</button>
@@ -69,6 +82,17 @@ export function Editor({ path, content, draft, onSave }: Props) {
       </div>
       {editing && !live ? (
         <textarea className="editor-area mono" dir="ltr" spellCheck={false} value={buf} onChange={(e) => setBuf(e.target.value)} data-testid="editor-textarea" />
+      ) : showDiff ? (
+        <div className="editor-scroll diff-pane" dir="ltr" data-testid="diff-view">
+          {base === null && <div className="diff-note">ملف جديد</div>}
+          {dlines.map((l, i) => (
+            <div key={i} className={`diff-line ${l.kind}${l.a === undefined && l.b === undefined ? ' gap' : ''}`}>
+              <span className="ln">{l.a ?? ''}</span><span className="ln">{l.b ?? ''}</span>
+              <span className="sign">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}</span>
+              <code>{l.text}</code>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="editor-scroll" ref={scroller} dir="ltr">
           <div className="gutter" aria-hidden="true">{Array.from({ length: Math.min(lines, 5000) }, (_, i) => <span key={i}>{i + 1}</span>)}</div>

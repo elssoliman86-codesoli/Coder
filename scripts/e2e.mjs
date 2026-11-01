@@ -118,13 +118,19 @@ await step('edit queue: prompt is applied and can be undone', async () => {
   await shot('06-queue-done');
 });
 
-await step('changes modal shows before/after; theme toggles; top-bar plan button', async () => {
-  await T('changes-btn').click();
-  await T('diff-view').first().waitFor({ timeout: 5000 });
-  const adds = await page.locator('.diff-line.add').count();
-  if (adds < 1) throw new Error('diff shows no added lines');
+await step('tree shows +/- per file, diff view, save clears it; theme toggles; top-bar plan button', async () => {
+  await T('tree-diff').first().waitFor({ timeout: 5000 });
+  const txt = (await T('tree-diff').first().innerText()).replace(/\s/g, '');
+  if (!/\+\d+/.test(txt)) throw new Error('tree diff badge has no +N: ' + txt);
+  await T('tree-file').filter({ hasText: 'index.html' }).first().click();
+  await T('diff-view').waitFor({ timeout: 5000 });
+  if ((await page.locator('.diff-line.add').count()) < 1) throw new Error('diff shows no added lines');
   await shot('06b-changes');
-  await page.keyboard.press('Escape');
+  await T('diff-toggle').click();
+  await T('code').waitFor();
+  await page.getByRole('button', { name: /تعديل/ }).first().click();
+  await page.getByRole('button', { name: /حفظ/ }).first().click();
+  await page.waitForFunction(() => !document.querySelector('[data-testid=tree-file][data-path="index.html"] [data-testid=tree-diff]'), null, { timeout: 5000 });
   await T('plan-top').click();
   await T('plan-view').waitFor();
   await page.keyboard.press('Escape');

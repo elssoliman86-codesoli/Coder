@@ -149,6 +149,16 @@ export function commitFile(id: string, path: string, content: string) {
   });
 }
 
+/** The person saved a file (or published): its old copy is no longer kept. */
+export function acceptChanges(id: string, path?: string) {
+  patchProject(id, (p) => {
+    if (!p.baseline) return;
+    if (!path) { delete p.baseline; return; }
+    delete p.baseline[path];
+    if (Object.keys(p.baseline).length === 0) delete p.baseline;
+  });
+}
+
 export function deleteProject(id: string) {
   app.set((s) => {
     const projects = { ...s.projects };

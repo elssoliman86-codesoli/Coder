@@ -62,6 +62,8 @@ function ProviderCard({ p }: { p: Provider }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [progress, setProgress] = useState<{ done: number; total: number; ok: number } | null>(null);
+  const stopRef = useRef<AbortController | null>(null);
   const set = (k: keyof Provider, v: string) => updateProvider(p.id, (x) => { (x as any)[k] = v; });
   const ep = { baseUrl: p.baseUrl, apiKey: p.apiKey };
 
@@ -72,13 +74,35 @@ function ProviderCard({ p }: { p: Provider }) {
     try {
       const models = await listModels(ep);
       const old = new Map(p.models.map((m) => [m.id, m]));
-      updateProvider(p.id, (x) => { x.models = models.map((m) => ({ ...m, starred: old.get(m.id)?.starred })); });
+      updateProvider(p.id, (x) => { x.models = models.map((m) => ({ ...m, starred: old.get(m.id)?.starred, status: 'testing' as const })); });
       setOpen(true);
+      await verify(models.map((m) => m.id));
     } catch (e) {
       setErr(errMsg(e));
     } finally {
       setLoading(false);
+      setProgress(null);
     }
+  }
+
+  /** Probes every listed model (HTTP 200?) and keeps only the ones that answer — the list then only holds working models. */
+  async function verify(ids: string[]) {
+    const ac = new AbortController();
+    stopRef.current = ac;
+    let done = 0;
+    setProgress({ done: 0, total: ids.length, ok: 0 });
+    let ok = 0;
+    await pool(ids, 6, async (id) => {
+      const r = await probeModel(ep, id, {}, ac.signal).catch(() => ({ ok: false, code: 0, error: 'cancelled' }));
+      if (ac.signal.aborted) return;
+      if (r.ok) { ok++; updateProvider(p.id, (x) => { const m = x.models.find((y) => y.id === id); if (m) { m.status = 'ok'; m.code = 200; m.error = undefined; } }); }
+      else updateProvider(p.id, (x) => { x.models = x.models.filter((y) => y.id !== id); });
+      setProgress({ done: ++done, total: ids.length, ok });
+    }, ac.signal);
+    // cancelled: whatever wasn't probed yet stays listed as untested
+    updateProvider(p.id, (x) => { x.models.forEach((m) => { if (m.status === 'testing') m.status = 'untested'; }); });
+    stopRef.current = null;
+    toast(ac.signal.aborted ? `اتوقف الفحص — ${ok} موديل بيرد 200` : `تم الفحص — ${ok} موديل بيرد 200 من ${ids.length} (الباقي اتشال)`, ok ? 'ok' : 'error');
   }
   async function test() {
     setErr('');
@@ -103,7 +127,8 @@ function ProviderCard({ p }: { p: Provider }) {
       {p.provider === 'nvidia' && <p className="muted small">NVIDIA NIM مابيبعتش CORS headers: شغّال في الـ APK، لكن المتصفح (PWA) هيحجبه. وبعض الموديلات في القايمة مش مفعّلة لحسابك — استخدم «اختبار الظاهر» واختار اللي حالته 200.</p>}
       {err && <p className="field-error" role="alert">{err}</p>}
       <div className="row">
-        <button className="btn primary" onClick={list} disabled={loading} data-testid="list-models">{loading ? '…' : t('listModels')}</button>
+        <button className="btn primary" onClick={list} disabled={loading} data-testid="list-models">{loading ? (progress ? `بيفحص ${progress.done}/${progress.total} — ✓ ${progress.ok}` : '…') : t('listModels')}</button>
+        {progress && <button className="btn danger" onClick={() => stopRef.current?.abort()} data-testid="stop-verify">إيقاف الفحص</button>}
         <button className="btn" onClick={test}>{t('testConnection')}</button>
         <button className="btn" onClick={() => setState((s) => { s.providers = s.providers.map((x) => ({ ...x, isDefault: x.id === p.id })); })} disabled={p.isDefault}>{p.isDefault ? 'الافتراضي' : 'اجعله افتراضي'}</button>
         <button className="btn danger" onClick={() => setState((s) => { s.providers = s.providers.filter((x) => x.id !== p.id); })} aria-label={t('delete')}><Icon name="trash" size={16} /></button>

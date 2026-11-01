@@ -22,8 +22,8 @@ export function diffLines(before: string, after: string, context = 3): DiffLine[
     let i = 0, j = 0;
     while (i < n || j < m) {
       if (i < n && j < m && a[i] === b[j]) { mid.push({ kind: 'same', text: a[i], a: s + i + 1, b: s + j + 1 }); i++; j++; }
-      else if (j < m && (i === n || t[i][j + 1] >= t[i + 1][j])) { mid.push({ kind: 'add', text: b[j], b: s + j + 1 }); j++; }
-      else { mid.push({ kind: 'del', text: a[i], a: s + i + 1 }); i++; }
+      else if (i < n && (j === m || t[i + 1][j] >= t[i][j + 1])) { mid.push({ kind: 'del', text: a[i], a: s + i + 1 }); i++; }
+      else { mid.push({ kind: 'add', text: b[j], b: s + j + 1 }); j++; }
     }
   }
   const all: DiffLine[] = [

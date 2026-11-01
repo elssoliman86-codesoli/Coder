@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Project } from '../../types';
-import { useApp, setState } from '../../storage/store';
+import { useApp, setState, acceptChanges } from '../../storage/store';
 import { useT } from '../../i18n';
 import { Field, Icon, Modal, ProgressRing, toast } from '../../components/ui';
 import { modelOptions } from '../settings/Settings';
@@ -60,7 +60,7 @@ export function PublishModal({ project, onClose, onOpenSettings }: { project: Pr
       }
     });
     setStep(null);
-    if (info) { setDone(true); toast('تم النشر بنجاح', 'ok'); }
+    if (info) { acceptChanges(project.id); setDone(true); toast('تم النشر بنجاح', 'ok'); }
   }
 
   const idx = step ? STEPS.findIndex(([k]) => k === step) : -1;

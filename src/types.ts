@@ -95,16 +95,11 @@ export interface Project {
   github?: GithubLink;
   /** AI-written visual simulation, used to preview apps that cannot run in the browser (native Android, desktop, Flutter…). */
   mock?: { html: string; at: number };
-  /** Recent edits/fixes with the before/after content of every file they changed. */
-  changes?: ChangeRecord[];
-}
-
-export interface ChangeRecord {
-  id: string;
-  at: number;
-  kind: 'edit' | 'fix';
-  label: string;
-  files: { path: string; before: string | null; after: string | null }[];
+  /**
+   * Content of each file as it was before the AI's pending changes (null = file is new).
+   * Drives the +/− counts and the diff view; an entry disappears when the file is saved or the project is published.
+   */
+  baseline?: Record<string, string | null>;
 }
 
 export interface GithubLink {

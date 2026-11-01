@@ -29,7 +29,9 @@ export function buildTree(paths: string[]): Node[] {
   return root.children!;
 }
 
-function Row({ n, depth, active, live, planned, openAll, onSelect }: { n: Node; depth: number; active: string | null; live: Set<string>; planned: Set<string>; openAll: boolean; onSelect: (p: string) => void }) {
+type Stats = Record<string, { added: number; removed: number }>;
+
+function Row({ n, depth, active, live, planned, openAll, stats, onSelect }: { n: Node; depth: number; active: string | null; live: Set<string>; planned: Set<string>; openAll: boolean; stats: Stats; onSelect: (p: string) => void }) {
   const [open, setOpen] = useState(openAll || depth < 2 || (!!active && active.startsWith(n.path + '/')));
   const pad = { paddingInlineStart: 8 + depth * 14 };
   if (n.children) {
@@ -39,7 +41,7 @@ function Row({ n, depth, active, live, planned, openAll, onSelect }: { n: Node; 
           <span className={open ? 'tri open' : 'tri'} aria-hidden="true">▸</span>
           <span className="tree-name" dir="ltr">{n.name}</span>
         </button>
-        {open && <ul role="group">{n.children.map((c) => <Row key={c.path} n={c} depth={depth + 1} active={active} live={live} planned={planned} openAll={openAll} onSelect={onSelect} />)}</ul>}
+        {open && <ul role="group">{n.children.map((c) => <Row key={c.path} n={c} depth={depth + 1} active={active} live={live} planned={planned} openAll={openAll} stats={stats} onSelect={onSelect} />)}</ul>}
       </li>
     );
   }
@@ -49,16 +51,22 @@ function Row({ n, depth, active, live, planned, openAll, onSelect }: { n: Node; 
         <LangIcon lang={languageOf(n.path)} size={20} />
         <span className={`tree-name${planned.has(n.path) ? ' planned' : ''}`} dir="ltr">{basename(n.path)}</span>
         {live.has(n.path) && <span className="live-dot" title="بيتكتب الآن" />}
+        {stats[n.path] && (
+          <span className="tree-diff" dir="ltr" data-testid="tree-diff" title="تغييرات لسه ما اتحفظتش">
+            {stats[n.path].added > 0 && <span className="diff-add">+{stats[n.path].added}</span>}
+            {stats[n.path].removed > 0 && <span className="diff-del">−{stats[n.path].removed}</span>}
+          </span>
+        )}
       </button>
     </li>
   );
 }
 
-export function FileTree({ paths, planned, active, live, onSelect }: { paths: string[]; planned: string[]; active: string | null; live: string[]; onSelect: (p: string) => void }) {
+export function FileTree({ paths, planned, active, live, stats = {}, onSelect }: { paths: string[]; planned: string[]; active: string | null; live: string[]; stats?: Stats; onSelect: (p: string) => void }) {
   const all = useMemo(() => [...new Set([...paths, ...planned])], [paths, planned]);
   const tree = useMemo(() => buildTree(all), [all]);
   const liveSet = useMemo(() => new Set(live), [live]);
   const pending = useMemo(() => new Set(planned.filter((p) => !paths.includes(p))), [paths, planned]);
   if (tree.length === 0) return <p className="muted small tree-empty">لسه مفيش ملفات</p>;
-  return <ul role="tree" className="tree" aria-label="files">{tree.map((n) => <Row key={n.path} n={n} depth={0} active={active} live={liveSet} planned={pending} openAll={all.length <= 80} onSelect={onSelect} />)}</ul>;
+  return <ul role="tree" className="tree" aria-label="files">{tree.map((n) => <Row key={n.path} n={n} depth={0} active={active} live={liveSet} planned={pending} openAll={all.length <= 80} stats={stats} onSelect={onSelect} />)}</ul>;
 }

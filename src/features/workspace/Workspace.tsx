@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useApp, setState, commitFile } from '../../storage/store';
+import { useApp, setState, commitFile, acceptChanges } from '../../storage/store';
 import { useT } from '../../i18n';
 import { Icon, Spinner, toast, useEscape, useNarrow } from '../../components/ui';
 import { errMsg } from '../../lib/util';
@@ -11,10 +11,10 @@ import { Preview, type PreviewHandle } from './Preview';
 import { PromptBar } from './PromptBar';
 import { PublishModal, DetailsModal } from './Publish';
 import { PlanModal } from './PlanView';
-import { ChangesModal } from './Changes';
 import { ReviewPopover, useReview } from './Review';
 import { basename } from '../../lib/lang';
 import { detectKind } from '../../lib/preview-kind';
+import { diffStats } from '../../lib/diff';
 
 export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: () => void; onOpenSettings: () => void }) {
   const t = useT();
@@ -51,13 +51,24 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   const [publishOpen, setPublishOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
-  const [changesOpen, setChangesOpen] = useState(false);
   const [full, setFull] = useState(false);
   useEscape(() => setFull(false), full);
   const preview = useRef<PreviewHandle>(null);
   const kind = useMemo(() => (project ? detectKind(project.files, project.type, project.primaryLanguage).kind : 'none'), [project?.files, project?.type, project?.primaryLanguage]); // eslint-disable-line react-hooks/exhaustive-deps
   // The design-review loop only makes sense for previews of the real UI (not terminals, notices or AI simulations).
   const reviewable = kind === 'html' || kind === 'react' || kind === 'next';
+  // +added/−removed per file, relative to the content before the AI's pending changes (Claude/Codex style).
+  const stats = useMemo(() => {
+    const out: Record<string, { added: number; removed: number }> = {};
+    if (!project?.baseline) return out;
+    const cur = new Map(project.files.map((f) => [f.path, f.content]));
+    for (const [path, before] of Object.entries(project.baseline)) {
+      const now = cur.get(path);
+      if (now === undefined || now === before) continue;
+      out[path] = diffStats(before ?? '', now);
+    }
+    return out;
+  }, [project?.baseline, project?.files]);
   const review = useReview(id, preview);
   const stopAll = () => { review.stop(); cancel(id); };
 
@@ -121,7 +132,6 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
         )}
         <span className="spacer" />
         <button className="icon-btn" aria-label="الخطة" title="الخطة" onClick={() => setPlanOpen(true)} data-testid="plan-top"><Icon name="list" /></button>
-        <button className="icon-btn badge-host" aria-label="التغييرات" title="التغييرات (قبل / بعد)" onClick={() => setChangesOpen(true)} data-testid="changes-btn"><Icon name="diff" />{(project.changes?.length ?? 0) > 0 && <span className="dot-count">{project.changes!.length}</span>}</button>
         <button className="btn sm" onClick={onBack}>{t('projects')}</button>
       </header>
 
@@ -139,11 +149,10 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
               </select>
             </label>
             <button className={showPreview ? 'btn on block' : 'btn block'} onClick={togglePreview} disabled={!canPreview || (working && !showPreview)} data-testid="preview-btn"><Icon name="play" size={16} /> {t('preview')}</button>
-            <button className="btn block" onClick={() => { closeSidebar(); setChangesOpen(true); }} data-testid="changes-side"><Icon name="diff" size={16} /> التغييرات{project.changes?.length ? ` (${project.changes.length})` : ''}</button>
             <button className="btn block" onClick={() => { closeSidebar(); setPlanOpen(true); }} data-testid="plan-btn"><Icon name="list" size={16} /> الخطة{project.plan ? ` (${project.plan.files.length})` : ''}</button>
             <section className="card files-card" aria-label={t('filesCard')} data-ui="card">
               <h3 className="card-title">{t('filesCard')} <span className="badge">{files.length}</span></h3>
-              <FileTree paths={files.map((f) => f.path)} planned={planned} active={active} live={following ? [following] : []} onSelect={openFile} />
+              <FileTree stats={stats} paths={files.map((f) => f.path)} planned={planned} active={active} live={following ? [following] : []} onSelect={openFile} />
             </section>
             <button className="btn primary block" onClick={() => { closeSidebar(); setPublishOpen(true); }} disabled={!files.length || working} data-testid="publish-btn"><Icon name="github" size={16} /> {t('publish')}</button>
             {project.publish && <button className="btn block" onClick={() => { closeSidebar(); setDetailsOpen(true); }} data-testid="details-btn">{t('details')}</button>}
@@ -173,7 +182,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
               </div>
             )}
             {active && (current || draft !== undefined) ? (
-              <Editor path={active} content={current?.content ?? ''} draft={draft} onSave={(c) => commitFile(id, active, c)} />
+              <Editor path={active} content={current?.content ?? ''} draft={draft} onSave={(c) => { commitFile(id, active, c); acceptChanges(id, active); }} base={active && project.baseline && active in project.baseline && current && project.baseline[active] !== current.content ? project.baseline[active] : undefined} />
             ) : (
               <div className="center muted ws-empty">{working ? <><Spinner /> بيجهّز الملفات…</> : 'اختار ملف من القايمة'}</div>
             )}
@@ -186,7 +195,6 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
 
       <PromptBar project={project} disabled={project.status === 'planning' || project.status === 'coding'} />
       {publishOpen && <PublishModal project={project} onClose={() => setPublishOpen(false)} onOpenSettings={onOpenSettings} />}
-      {changesOpen && <ChangesModal project={project} onClose={() => setChangesOpen(false)} />}
       {planOpen && <PlanModal project={project} onClose={() => setPlanOpen(false)} onOpenFile={openFile} />}
       {detailsOpen && <DetailsModal project={project} onClose={() => setDetailsOpen(false)} />}
     </div>

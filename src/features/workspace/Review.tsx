@@ -37,7 +37,7 @@ export function useReview(projectId: string, preview: RefObject<PreviewHandle | 
         if (snap.issues.length === 0 && !critique) break;
         setNote(`دورة إصلاح ${history.length + 1} — ${snap.issues.length} ملاحظة`);
         const before = snap.issues.length;
-        const result = await runJob(projectId, 'fix', (ctx) => runFixCycle(ctx, { observed: snap.issues, bodyText: snap.bodyText, userCritique: critique }), critique ? `ملاحظة: ${critique}` : 'إصلاح من المراجعة');
+        const result = await runJob(projectId, 'fix', (ctx) => runFixCycle(ctx, { observed: snap.issues, bodyText: snap.bodyText, userCritique: critique }));
         critique = undefined;
         if (stopped.current || !result || !result.fix) break; // cancelled, failed or nothing to fix
         snap = await handle.reload();
