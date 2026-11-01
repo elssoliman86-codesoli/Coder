@@ -172,15 +172,17 @@ export async function generateProject(ctx: RunCtx): Promise<void> {
       `Write the complete content of \`${f.path}\` now (${f.purpose}). Output only the raw file content.`,
     ].filter(Boolean).join('\n\n');
     let acc = '';
-    ctx.draft(f.path, '');
-    try {
+    const saved = ctx.getProject().recovery?.[f.path];
+    if (saved && saved.length > 0) {
+      ctx.log(`${f.path}: لقيت ${saved.length} حرف محفوظين من المرة اللي فاتت — هكمّل منهم`);
+      acc = await continueFile(ctx, f.path, saved);
+    } else {
+      ctx.draft(f.path, '');
+      // Fresh text per request: a retried request restarts from zero, so never append to an earlier attempt.
       acc = await ctx.chat('coder', [{ role: 'system', content: system }, { role: 'user', content: user }], (t) => {
         acc += t;
         ctx.draft(f.path, acc);
       });
-    } catch (e) {
-      ctx.draft(f.path, null);
-      throw e;
     }
     const content = stripCodeFence(acc).replace(/\s+$/, '') + '\n';
     ctx.commitFile(f.path, content);
@@ -195,6 +197,39 @@ export async function generateProject(ctx: RunCtx): Promise<void> {
   ctx.patch((x) => { x.status = 'ready'; x.primaryLanguage = primaryLanguage(x.files.map((f) => f.path)); });
   if (issues.length) ctx.log(`التحليل لقى ${issues.length} مشكلة — هتتصلح في دورة المراجعة: ${issues.slice(0, 3).map((i) => `${i.file}: ${i.message}`).join(' | ')}`, 'warn');
   else ctx.log('اكتملت كتابة المشروع والتحليل نضيف', 'ok');
+}
+
+/** Longest suffix of `a` that is also a prefix of `b` (max 300 chars) — removes text the model repeated when continuing. */
+function overlap(a: string, b: string): number {
+  for (let k = Math.min(300, a.length, b.length); k >= 8; k--) if (a.endsWith(b.slice(0, k))) return k;
+  return 0;
+}
+
+/**
+ * Continues a file whose stream was cut off. The text already received is kept; the model only produces the rest,
+ * which is appended (and shown live) as it arrives.
+ */
+export async function continueFile(ctx: RunCtx, path: string, partial: string): Promise<string> {
+  const p = ctx.getProject();
+  const shownTail = partial.length > 24_000 ? `[…first ${partial.length - 24_000} characters omitted…]\n` + partial.slice(-24_000) : partial;
+  const user = [
+    `Project: ${p.name}`,
+    p.plan ? `Plan:\n${planBrief(p.plan)}` : `Description:\n${p.description}`,
+    `The file \`${path}\` was being written when the connection dropped. This is everything written so far (it stops mid-way):\n<<<PARTIAL\n${shownTail}\nPARTIAL>>>`,
+    'Continue from the exact next character. Output ONLY the remaining content of the file: do not repeat anything already written, no explanations, no markdown fences. Finish the file completely.',
+  ].join('\n\n');
+  let add = '';
+  ctx.draft(path, partial);
+  try {
+    await ctx.chat('coder', [{ role: 'system', content: CODER_SYSTEM }, { role: 'user', content: user }], (t) => {
+      add += t;
+      ctx.draft(path, partial + add.replace(/^```[\w-]*\n/, ''));
+    });
+  } catch (e) {
+    throw e;
+  }
+  const cont = add.replace(/^```[\w-]*\n/, '');
+  return partial + cont.slice(overlap(partial, cont));
 }
 
 // ---------- coder (edits) / fixer share the multi-file apply ----------

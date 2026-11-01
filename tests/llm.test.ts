@@ -166,3 +166,28 @@ test('streamChat stops immediately on abort while the request hangs (native HTTP
   await assert.rejects(p);
   assert.ok(Date.now() - t0 < 1000);
 });
+
+import { StreamInterrupted } from '../src/llm/client.ts';
+
+test('a connection drop mid-stream keeps the text that arrived instead of restarting (no duplicated content)', async () => {
+  const enc = new TextEncoder();
+  let calls = 0;
+  const f = (async () => {
+    calls++;
+    let n = 0;
+    const body = new ReadableStream({
+      pull(c) {
+        if (n++ === 0) c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"hello "}}]}\n\ndata: {"choices":[{"delta":{"content":"world"}}]}\n\n'));
+        else c.error(new TypeError('network lost'));
+      },
+    });
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  }) as unknown as typeof fetch;
+  let seen = '';
+  await assert.rejects(
+    _stream({ baseUrl: 'http://x/v1', apiKey: 'k' }, { model: 'm', messages: [], onToken: (t) => { seen += t; } }, { fetch: f, sleep: async () => {} }),
+    (e: unknown) => e instanceof StreamInterrupted && e.partial === 'hello world',
+  );
+  assert.equal(calls, 1);
+  assert.equal(seen, 'hello world');
+});

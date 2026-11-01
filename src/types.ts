@@ -100,6 +100,8 @@ export interface Project {
    * Drives the +/− counts and the diff view; an entry disappears when the file is saved or the project is published.
    */
   baseline?: Record<string, string | null>;
+  /** Text that had already arrived from the model when a job was cut off (network drop, stop, crash) — path → partial content. */
+  recovery?: Record<string, string>;
 }
 
 export interface GithubLink {

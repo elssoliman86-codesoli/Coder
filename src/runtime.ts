@@ -7,7 +7,8 @@ import { BUILTIN_SKILLS } from './skills/builtin';
 import { Aborted, errMsg, uid } from './lib/util';
 import type { Role, Skill } from './types';
 import { explainHttpError, streamChat, type ChatMessage } from './llm/client';
-import { applyEdit, generateMock, generateProject, planProject } from './agents/pipeline';
+import { applyEdit, continueFile, generateMock, generateProject, planProject } from './agents/pipeline';
+import { stripCodeFence } from './agents/parse';
 
 export interface LogLine {
   t: number;
@@ -50,12 +51,79 @@ export function log(id: string, msg: string, kind: LogLine['kind'] = 'info') {
   runtime.set((r) => ({ ...r, logs: { ...r.logs, [id]: [...(r.logs[id] ?? []).slice(-199), { t: Date.now(), msg, kind }] } }));
 }
 
+// Streaming can deliver hundreds of tokens a second. The store is updated at most once per ~16ms (a frame) with the full
+// latest text, so every character is shown and the UI never falls behind or janks.
+const pendingDraft = new Map<string, { id: string; path: string; text: string }>();
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
 function setDraft(id: string, path: string, text: string | null) {
+  const key = id + '\0' + path;
+  if (text === null) { pendingDraft.delete(key); applyDraft(id, path, null); return; }
+  pendingDraft.set(key, { id, path, text });
+  if (!draftTimer) draftTimer = setTimeout(flushDrafts, 16);
+}
+function flushDrafts() {
+  draftTimer = null;
+  const items = [...pendingDraft.values()];
+  pendingDraft.clear();
+  for (const d of items) applyDraft(d.id, d.path, d.text);
+}
+function applyDraft(id: string, path: string, text: string | null) {
   runtime.set((r) => {
     const d = { ...(r.drafts[id] ?? {}) };
     if (text === null) delete d[path];
     else d[path] = text;
     return { ...r, drafts: { ...r.drafts, [id]: d }, following: { ...r.following, [id]: text === null ? (r.following[id] === path ? null : r.following[id]) : path } };
+  });
+}
+
+// ---- crash/disconnect safety: everything the model has written so far is kept, not just finished files ----
+const lastDraft = new Map<string, Map<string, string>>();
+const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const NOT_RECOVERABLE = (p: string) => p === 'PLAN.json' || p === 'preview-simulation.html';
+
+function trackDraft(id: string, path: string, text: string | null) {
+  if (text === null || NOT_RECOVERABLE(path)) return;
+  let m = lastDraft.get(id);
+  if (!m) lastDraft.set(id, (m = new Map()));
+  m.set(path, text);
+  if (!persistTimers.has(id)) persistTimers.set(id, setTimeout(() => { persistTimers.delete(id); persistRecovery(id); }, 1500));
+}
+
+function persistRecovery(id: string) {
+  const m = lastDraft.get(id);
+  if (!m || !app.get().projects[id]) return;
+  const entries = [...m].filter(([, t]) => t.length > 0);
+  if (!entries.length) return;
+  patchProject(id, (p) => { p.recovery = { ...(p.recovery ?? {}), ...Object.fromEntries(entries) }; });
+}
+
+function dropRecovery(id: string, path: string) {
+  if (!app.get().projects[id]?.recovery?.[path]) return;
+  patchProject(id, (p) => { if (p.recovery) { delete p.recovery[path]; if (!Object.keys(p.recovery).length) delete p.recovery; } });
+}
+
+export function discardRecovery(id: string, path?: string) {
+  if (path) { dropRecovery(id, path); return; }
+  patchProject(id, (p) => { delete p.recovery; });
+}
+
+/** Save what arrived as the file's content as-is (the person decides it is good enough). */
+export function acceptRecovery(id: string, path: string) {
+  const t = app.get().projects[id]?.recovery?.[path];
+  if (t === undefined) return;
+  commitFile(id, path, stripCodeFence(t).replace(/\s+$/, '') + '\n');
+  dropRecovery(id, path);
+}
+
+/** Ask the model to continue a cut-off file from the exact next character. */
+export async function resumeRecovery(id: string, path: string) {
+  await runJob(id, 'edit', async (ctx) => {
+    const partial = ctx.getProject().recovery?.[path];
+    if (partial === undefined) return;
+    ctx.log(`بيكمّل ${path} من حيث وقف (${partial.length} حرف محفوظين)…`);
+    const full = await continueFile(ctx, path, partial);
+    ctx.commitFile(path, stripCodeFence(full).replace(/\s+$/, '') + '\n');
+    ctx.log(`اكتمل ${path}`, 'ok');
   });
 }
 
@@ -66,8 +134,8 @@ export function makeCtx(id: string, signal: AbortSignal): RunCtx {
     live: true,
     getProject: () => app.get().projects[id],
     patch: (fn) => patchProject(id, fn),
-    commitFile: (path, content) => commitFile(id, path, content),
-    draft: (path, text) => setDraft(id, path, text),
+    commitFile: (path, content) => { lastDraft.get(id)?.delete(path); commitFile(id, path, content); dropRecovery(id, path); },
+    draft: (path, text) => { setDraft(id, path, text); trackDraft(id, path, text); },
     log: (m, k) => log(id, m, k),
     chat: (role: Role, messages: ChatMessage[], onToken) => {
       const ep = resolveEndpoint(role);
@@ -121,6 +189,10 @@ export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => 
   } finally {
     controllers.delete(id);
     setBusy(id, null);
+    clearTimeout(persistTimers.get(id)); persistTimers.delete(id);
+    flushDrafts();
+    persistRecovery(id);
+    lastDraft.delete(id);
     runtime.set((r) => ({ ...r, drafts: { ...r.drafts, [id]: {} }, following: { ...r.following, [id]: null } }));
     if (before) recordChange(id, before);
   }

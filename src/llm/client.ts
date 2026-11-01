@@ -28,6 +28,13 @@ export interface Deps {
   sleep?: (ms: number) => Promise<void>;
 }
 
+/** The connection dropped after text had already arrived. `partial` is everything received so far. */
+export class StreamInterrupted extends Error {
+  constructor(public partial: string, public cause?: unknown) {
+    super(`الاتصال فصل بعد ما وصل ${partial.length} حرف`);
+  }
+}
+
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -192,6 +199,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (opts.signal?.aborted) throw new Aborted();
     const idle = new AbortController();
+    let full = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
     const arm = () => {
       clearTimeout(timer);
@@ -228,7 +236,6 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
         throw err;
       }
       const ctype = res.headers.get('content-type') ?? '';
-      let full = '';
       if (!res.body || !ctype.includes('text/event-stream')) {
         // Provider ignored stream:true — accept the plain JSON answer.
         const j = await res.json();
@@ -254,6 +261,8 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
     } catch (e) {
       if (opts.signal?.aborted) throw new Aborted();
       if (e instanceof HttpError) throw e;
+      // Text already arrived: restarting would duplicate it. Hand the partial text to the caller, who keeps it and can resume.
+      if (full.length > 0) throw new StreamInterrupted(full, e);
       lastErr = idle.signal.aborted ? new Error('انتهت مهلة الاستجابة (لا بيانات من الموديل)') : e;
       if (attempt < maxAttempts - 1) {
         await wait(800 * 2 ** attempt);
@@ -285,6 +294,7 @@ export const PROVIDER_PRESETS: { id: string; label: string; baseUrl: string }[] 
 
 /** Turns a provider HTTP error into an actionable Arabic message that names the model. */
 export function explainHttpError(e: unknown, model: string): Error {
+  if (e instanceof StreamInterrupted) return new Error(`الاتصال فصل بعد ما وصل ${e.partial.length} حرف من ${'"'}${model}${'"'}. الكود اللي وصل اتحفظ — اضغط «كمّل» لما النت يرجع.`);
   if (!(e instanceof HttpError)) return e instanceof Error ? e : new Error(String(e));
   const m = `الموديل "${model}"`;
   const tail = e.message.replace(/^فشل الطلب \(\d+\):\s*/, '').slice(0, 200);

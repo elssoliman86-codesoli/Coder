@@ -3,7 +3,7 @@ import { useApp, setState, commitFile, acceptChanges } from '../../storage/store
 import { useT } from '../../i18n';
 import { Icon, Spinner, toast, useEscape, useNarrow } from '../../components/ui';
 import { errMsg } from '../../lib/util';
-import { cancel, startProject, useRuntime } from '../../runtime';
+import { acceptRecovery, cancel, discardRecovery, resumeRecovery, startProject, useRuntime } from '../../runtime';
 import { modelOptions } from '../settings/Settings';
 import { Editor } from './Editor';
 import { FileTree } from './FileTree';
@@ -154,6 +154,20 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
         )}
 
         <main className="ws-main">
+          {!busy && project.recovery && Object.keys(project.recovery).length > 0 && (
+            <div className="recovery" role="alert" data-testid="recovery">
+              <strong>الاتصال فصل أو العملية اتوقفت — الكود اللي وصل اتحفظ:</strong>
+              {Object.entries(project.recovery).map(([path, text]) => (
+                <div key={path} className="recovery-row">
+                  <span className="mono" dir="ltr">{path}</span> <span className="muted small">{text.length} حرف</span>
+                  <span className="spacer" />
+                  <button className="btn sm primary" onClick={() => void resumeRecovery(id, path)} data-testid="recovery-resume">كمّل</button>
+                  <button className="btn sm" onClick={() => { acceptRecovery(id, path); openFile(path); }}>احفظه كده</button>
+                  <button className="btn sm" onClick={() => discardRecovery(id, path)}>تجاهل</button>
+                </div>
+              ))}
+            </div>
+          )}
           {showPreview && (
             <div className={full ? 'ws-preview full' : 'ws-preview'} data-testid="ws-preview">
               <Preview ref={preview} project={project} full={full} onToggleFull={() => setFull(!full)} onClose={() => { setShowPreview(false); setFull(false); }} onWindowEnd={() => review.onWindowEnd()} disabled={review.phase === 'fixing'} />

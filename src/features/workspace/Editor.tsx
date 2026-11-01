@@ -4,20 +4,6 @@ import { languageOf } from '../../lib/lang';
 import { Icon } from '../../components/ui';
 import { diffLines, diffStats } from '../../lib/diff';
 
-/** Latest value, committed at most once per animation frame (keeps streaming smooth on mid-range phones). */
-function useRafValue<T>(value: T): T {
-  const [v, setV] = useState(value);
-  const latest = useRef(value);
-  const raf = useRef(0);
-  latest.current = value;
-  useEffect(() => {
-    if (raf.current) return;
-    raf.current = requestAnimationFrame(() => { raf.current = 0; setV(latest.current); });
-  }, [value]);
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
-  return v;
-}
-
 interface Props {
   path: string;
   content: string;
@@ -43,18 +29,39 @@ export function Editor({ path, content, draft, onSave, base }: Props) {
   useEffect(() => { if (!live) setPaused(null); }, [live]);
 
   const shown = paused ?? (live ? draft! : content);
-  const text = useRafValue(shown);
+  // While live, characters are appended straight to the DOM (no re-highlighting, no giant React diff), so the editor
+  // keeps pace with a fast model; syntax highlighting is applied once the file is finished.
+  const text = live ? '' : shown;
   const lang = languageOf(path);
-  const html = useMemo(() => highlight(text, lang), [text, lang]);
+  const html = useMemo(() => (live ? '' : highlight(text, lang)), [text, lang, live]);
   const lines = text === '' ? 1 : text.split('\n').length;
   const changed = base !== undefined && !live;
   const showDiff = changed && view === 'diff' && !editing;
   const dlines = useMemo(() => (showDiff ? diffLines(base ?? '', content, 4) : []), [showDiff, base, content]);
   const dstat = useMemo(() => (changed ? diffStats(base ?? '', content) : { added: 0, removed: 0 }), [changed, base, content]);
 
+  const liveCode = useRef<HTMLElement>(null);
+  const liveGutter = useRef<HTMLDivElement>(null);
+  const rendered = useRef({ text: '', lines: 0 });
   useEffect(() => {
-    if (live && follow && !paused && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
-  }, [text, live, follow, paused]);
+    const code = liveCode.current, gut = liveGutter.current;
+    if (!live || !code || !gut) { rendered.current = { text: '', lines: 0 }; return; }
+    const r = rendered.current;
+    if (!shown.startsWith(r.text)) { code.textContent = ''; gut.textContent = ''; r.text = ''; r.lines = 0; }
+    const add = shown.slice(r.text.length);
+    if (add || r.lines === 0) {
+      if (add) code.appendChild(document.createTextNode(add));
+      r.text = shown;
+      const total = shown.split('\n').length;
+      if (total > r.lines) {
+        const frag = document.createDocumentFragment();
+        for (let n = r.lines + 1; n <= total; n++) { const s = document.createElement('span'); s.textContent = String(n); frag.appendChild(s); }
+        gut.appendChild(frag);
+        r.lines = total;
+      }
+    }
+    if (follow && !paused && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
+  }, [shown, live, follow, paused]);
 
   return (
     <div className="editor" data-testid="editor" data-live={live ? '1' : '0'}>
@@ -93,10 +100,15 @@ export function Editor({ path, content, draft, onSave, base }: Props) {
             </div>
           ))}
         </div>
+      ) : live ? (
+        <div className="editor-scroll" ref={scroller} dir="ltr">
+          <div className="gutter" aria-hidden="true" ref={liveGutter} />
+          <pre className="code mono" data-testid="code"><code ref={liveCode} /><span className="caret" /></pre>
+        </div>
       ) : (
         <div className="editor-scroll" ref={scroller} dir="ltr">
           <div className="gutter" aria-hidden="true">{Array.from({ length: Math.min(lines, 5000) }, (_, i) => <span key={i}>{i + 1}</span>)}</div>
-          <pre className="code mono" data-testid="code"><code dangerouslySetInnerHTML={{ __html: html + (live ? '<span class="caret"></span>' : '') + '\n' }} /></pre>
+          <pre className="code mono" data-testid="code"><code dangerouslySetInnerHTML={{ __html: html + '\n' }} /></pre>
         </div>
       )}
     </div>
