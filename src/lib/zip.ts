@@ -43,14 +43,26 @@ export interface ImportResult {
   skipped: string[];
 }
 
-export async function importZip(data: ArrayBuffer | Uint8Array | Blob): Promise<ImportResult> {
-  const zip = await JSZip.loadAsync(data);
-  const entries = Object.values(zip.files).filter((e) => !e.dir);
-  if (entries.length > LIMITS.maxEntries) throw new ImportError(`الأرشيف فيه ملفات كتير (${entries.length})`);
+export type Progress = (done: number, total: number) => void;
+const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+
+export async function importZip(data: ArrayBuffer | Uint8Array | Blob, onProgress?: Progress): Promise<ImportResult> {
+  let zip: JSZip;
+  try { zip = await JSZip.loadAsync(data); } catch { throw new ImportError('الملف ده مش zip سليم (أو تالف). جرّب تضغطه تاني.'); }
+  const all = Object.values(zip.files).filter((e) => !e.dir);
   const files: ProjectFile[] = [];
   const skipped: string[] = [];
+  // folders like node_modules/.git are dropped BEFORE the count limit, so a zip that includes them still imports
+  const entries = all.filter((e) => {
+    const p = e.name.replace(/\\/g, '/');
+    if (SKIP_DIR.test(p) || BINARY_EXT.test(p)) { skipped.push(p); return false; }
+    return true;
+  });
+  if (entries.length > LIMITS.maxEntries) throw new ImportError(`الأرشيف فيه ملفات كتير (${entries.length}) بعد استبعاد node_modules وغيرها`);
   let total = 0;
+  let n = 0;
   for (const entry of entries) {
+    if (++n % 40 === 0) { onProgress?.(n, entries.length); await tick(); } // keep the UI alive on big archives
     const path = safePath(entry.name);
     if (!path) continue;
     if (SKIP_DIR.test(path) || BINARY_EXT.test(path)) { skipped.push(path); continue; }
@@ -63,12 +75,12 @@ export async function importZip(data: ArrayBuffer | Uint8Array | Blob): Promise<
   return { files: stripCommonRoot(files), skipped };
 }
 
-export async function importFileList(list: File[]): Promise<ImportResult> {
+export async function importFileList(list: File[], onProgress?: Progress): Promise<ImportResult> {
   const files: ProjectFile[] = [];
   const skipped: string[] = [];
   for (const f of list) {
     if (/\.zip$/i.test(f.name)) {
-      const r = await importZip(await f.arrayBuffer());
+      const r = await importZip(await f.arrayBuffer(), onProgress);
       files.push(...r.files);
       skipped.push(...r.skipped);
       continue;

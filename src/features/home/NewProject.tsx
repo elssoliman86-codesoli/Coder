@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Field, Icon, Modal, toast } from '../../components/ui';
+import { Field, Icon, Modal, Spinner, toast } from '../../components/ui';
 import { useT } from '../../i18n';
 import { importFileList } from '../../lib/zip';
 import { detectProjectType, primaryLanguage } from '../../lib/lang';
@@ -20,12 +20,21 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
   const [errors, setErrors] = useState<{ name?: string; desc?: string }>({});
   const input = useRef<HTMLInputElement>(null);
   const [ghOpen, setGhOpen] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [importErr, setImportErr] = useState('');
+  const [aiBuild, setAiBuild] = useState(false);
 
-  async function addFiles(list: File[]) {
-    if (!list.length) return;
+  async function addFiles(picked: File[]) {
+    if (!picked.length) return;
     setBusy(true);
+    setImportErr('');
+    setProgress('بيقرأ الملف…');
     try {
-      const r = await importFileList(list);
+      // Read the bytes NOW: on Android the picked File can become unreadable once the input is reset.
+      const list = await Promise.all(picked.map(async (f) => new File([await f.arrayBuffer()], f.name)));
+      setProgress('بيفك الضغط…');
+      const r = await importFileList(list, (d, t) => setProgress(`بيفك الضغط… ${d}/${t}`));
+      if (r.files.length === 0) throw new Error(`الملف اتفتح بس مفيهوش ملفات نصية قابلة للتعديل${r.skipped.length ? ` (اتخطّى ${r.skipped.length} ملف: صور/ثنائية/node_modules)` : ''}`);
       setFiles((prev) => {
         const map = new Map(prev.map((f) => [f.path, f]));
         for (const f of r.files) map.set(f.path, f);
@@ -34,30 +43,33 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
       setSkipped((n) => n + r.skipped.length);
       setSource(list.map((f) => f.name).join(', '));
       if (!name) setName(list[0].name.replace(/\.[^.]+$/, '').replace(/-main$/, ''));
+      toast(`تم فك الضغط: ${r.files.length} ملف${r.skipped.length ? ` (اتخطّى ${r.skipped.length})` : ''}`, 'ok');
     } catch (e) {
+      setImportErr(errMsg(e));
       toast(errMsg(e), 'error');
     } finally {
       setBusy(false);
+      setProgress('');
     }
   }
 
   function create() {
     const err: typeof errors = {};
     if (!name.trim()) err.name = 'اكتب اسم المشروع';
-    if (desc.trim().length < 10) err.desc = 'اكتب وصف فيه تفاصيل كفاية (10 حروف على الأقل)';
+    if (!files.length && desc.trim().length < 10) err.desc = 'اكتب وصف فيه تفاصيل كفاية (10 حروف على الأقل)';
     setErrors(err);
     if (Object.keys(err).length) return;
     const id = uid('p');
     const paths = files.map((f) => f.path);
     const now = Date.now();
     const project: Project = {
-      id, name: name.trim(), description: desc.trim(), type: paths.length ? detectProjectType(paths, files) : 'website',
-      primaryLanguage: paths.length ? primaryLanguage(paths) : 'html', files, status: 'new', style: 'Minimalism', queue: [],
+      id, name: name.trim(), description: desc.trim() || `مشروع مستورد من ${source}`, type: paths.length ? detectProjectType(paths, files) : 'website',
+      primaryLanguage: paths.length ? primaryLanguage(paths) : 'html', files, status: files.length && !aiBuild ? 'ready' : 'new', style: 'Minimalism', queue: [],
       importedFrom: source || undefined, createdAt: now, updatedAt: now, reviewCycles: 0,
     };
     setState((s) => { s.projects = { ...s.projects, [id]: project }; });
     onCreated(id);
-    void startProject(id);
+    if (!files.length || aiBuild) void startProject(id);
   }
 
   return (
@@ -95,9 +107,19 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') input.current?.click(); }}
         >
           <Icon name="upload" size={24} />
-          <span>{files.length ? `${files.length} ملف جاهز${skipped ? ` (تم تخطي ${skipped})` : ''} — ${source}` : t('importHint')}</span>
-          <input ref={input} type="file" multiple hidden data-testid="import-input" onChange={(e) => { void addFiles([...(e.target.files ?? [])]); e.target.value = ''; }} />
+          <span>{busy ? <><Spinner /> {progress}</> : files.length ? `${files.length} ملف جاهز${skipped ? ` (تم تخطي ${skipped})` : ''} — ${source}` : t('importHint')}</span>
+          <input ref={input} type="file" multiple hidden data-testid="import-input" onChange={(e) => { const picked = [...(e.target.files ?? [])]; void addFiles(picked).finally(() => { if (input.current) input.current.value = ''; }); }} />
         </div>
+        {importErr && <p className="field-error" role="alert" data-testid="import-error">{importErr}</p>}
+        {files.length > 0 && (
+          <details className="stack" data-testid="import-files">
+            <summary>الملفات اللي اتفك ضغطها ({files.length})</summary>
+            <ul className="plan-files" dir="ltr">{files.slice(0, 300).map((f) => <li key={f.path} className="mono small">{f.path}</li>)}{files.length > 300 && <li className="muted small">… و{files.length - 300} ملف تاني</li>}</ul>
+          </details>
+        )}
+        {files.length > 0 && (
+          <label className="check"><input type="checkbox" checked={aiBuild} onChange={(e) => setAiBuild(e.target.checked)} data-testid="ai-build" /> خلّي الـ AI يخطط ويكمّل المشروع بناءً على الوصف (بيستخدم الموديل). من غير ده بيفتح الملفات بس وتعدّل براحتك.</label>
+        )}
         {files.length > 0 && <button className="link" onClick={() => { setFiles([]); setSkipped(0); setSource(''); }}>{t('fromScratch')}</button>}
       </div>
     </Modal>

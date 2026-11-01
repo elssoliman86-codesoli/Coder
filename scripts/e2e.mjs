@@ -230,6 +230,27 @@ await step('skills: import a GitHub repo as a folder, open its files, see activa
   await page.unroute('https://api.github.com/repos/acme/**', handler);
 });
 
+await step('zip upload: extracts, lists files, opens the project without calling the model', async () => {
+  const { default: JSZip } = await import('jszip');
+  const z = new JSZip();
+  z.file('calc-main/main.py', 'print("hi")\n');
+  z.file('calc-main/README.md', '# calc');
+  z.file('calc-main/node_modules/x/y.js', 'skip');
+  const buf = await z.generateAsync({ type: 'nodebuffer' });
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await T('hamburger').click();
+  await page.getByRole('button', { name: 'مشاريعي' }).first().click();
+  await T('new-project').click();
+  await T('import-input').setInputFiles({ name: 'calc-main.zip', mimeType: 'application/zip', buffer: buf });
+  await page.getByText(/2 ملف جاهز/).waitFor({ timeout: 10000 }).catch(async (e) => { console.log('BODY:', (await page.locator('.modal').innerText()).slice(0, 600)); throw e; });
+  await T('import-files').getByText('main.py').waitFor({ state: 'attached' });
+  await T('create-project').click();
+  await T('workspace').waitFor();
+  if (!(await T('sidebar').count())) await T('sidebar-toggle').click();
+  await T('tree-file').filter({ hasText: 'main.py' }).first().waitFor({ timeout: 10000 });
+  if (await T('activity').count()) throw new Error('model job started for a plain zip import');
+});
+
 await step('GitHub import: repos → Start → file tree; native app gets a visual simulation; publish is branch-based', async () => {
   const files = {
     s1: '<manifest package="com.x.notes"/>', s2: 'package com.x.notes\nimport android.os.Bundle\nclass MainActivity', s3: 'plugins { id "com.android.application" }',

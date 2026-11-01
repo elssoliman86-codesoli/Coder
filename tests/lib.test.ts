@@ -122,3 +122,13 @@ test('analyzeProject does not flag public/ or build-output refs', () => {
   const noBuild = _ap([{ path: 'index.html', content: '<script src="missing.js"></script>' }]);
   assert.equal(noBuild.filter((f) => f.message.includes('مرجع')).length, 1);
 });
+
+test('importZip: node_modules does not count toward the entry limit, and a broken file gives a clear error', async () => {
+  const z = new JSZip();
+  z.file('app/index.html', '<p>hi</p>');
+  for (let i = 0; i < 3500; i++) z.file(`app/node_modules/pkg/f${i}.js`, 'x');
+  const r = await importZip(await z.generateAsync({ type: 'uint8array' }));
+  assert.equal(r.files.length, 1);
+  assert.equal(r.files[0].path, 'index.html');
+  await assert.rejects(importZip(new Uint8Array([1, 2, 3, 4])), /مش zip سليم/);
+});
