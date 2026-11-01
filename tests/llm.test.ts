@@ -146,3 +146,23 @@ test('streamChat retries once with flattened messages after a roles-alternate 40
   assert.equal(bodies.length, 2);
   assert.deepEqual(bodies[1].messages.map((m: any) => m.role), ['user']);
 });
+
+import { raceAbort } from '../src/llm/http.ts';
+import { streamChat as _stream } from '../src/llm/client.ts';
+
+test('raceAbort rejects at once when the signal aborts, even if the operation never settles', async () => {
+  const ac = new AbortController();
+  const p = raceAbort(new Promise<never>(() => {}), ac.signal);
+  setTimeout(() => ac.abort(), 10);
+  await assert.rejects(p);
+});
+
+test('streamChat stops immediately on abort while the request hangs (native HTTP cannot be cancelled)', async () => {
+  const ac = new AbortController();
+  const hang = (() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+  const p = _stream({ baseUrl: 'http://x/v1', apiKey: 'k' }, { model: 'm', messages: [], signal: ac.signal }, { fetch: hang });
+  setTimeout(() => ac.abort(), 10);
+  const t0 = Date.now();
+  await assert.rejects(p);
+  assert.ok(Date.now() - t0 < 1000);
+});

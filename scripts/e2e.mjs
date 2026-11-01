@@ -131,7 +131,7 @@ await step('tree shows +/- per file, diff view, save clears it; theme toggles; t
   await page.getByRole('button', { name: /تعديل/ }).first().click();
   await page.getByRole('button', { name: /حفظ/ }).first().click();
   await page.waitForFunction(() => !document.querySelector('[data-testid=tree-file][data-path="index.html"] [data-testid=tree-diff]'), null, { timeout: 5000 });
-  await T('plan-top').click();
+  await T('plan-btn').click();
   await T('plan-view').waitFor();
   await page.keyboard.press('Escape');
   await T('theme-toggle').click();
@@ -208,6 +208,7 @@ await step('GitHub import: repos → Start → file tree; native app gets a visu
     if (m) return json({ encoding: 'base64', content: Buffer.from(files[m[1]]).toString('base64') });
     return json({ message: 'unexpected' }, 500);
   });
+  await T('hamburger').click();
   await page.getByRole('button', { name: 'مشاريعي' }).first().click();
   await T('new-project').click();
   await T('gh-import').click();

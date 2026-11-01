@@ -20,9 +20,11 @@ interface Runtime {
   logs: Record<string, LogLine[]>;
   busy: Record<string, string | null>; // projectId → what is running
   following: Record<string, string | null>; // projectId → file currently being written
+  /** Live proof that the model is working: when the job started, how much text arrived, and the tail of it. */
+  progress: Record<string, { startedAt: number; lastAt: number; chars: number; tail: string } | undefined>;
 }
 
-export const runtime = createStore<Runtime>({ drafts: {}, logs: {}, busy: {}, following: {} });
+export const runtime = createStore<Runtime>({ drafts: {}, logs: {}, busy: {}, following: {}, progress: {} });
 const controllers = new Map<string, AbortController>();
 
 export function useRuntime<T>(sel: (r: Runtime) => T): T {
@@ -70,13 +72,22 @@ export function makeCtx(id: string, signal: AbortSignal): RunCtx {
     chat: (role: Role, messages: ChatMessage[], onToken) => {
       const ep = resolveEndpoint(role);
       const st = app.get().settings;
-      return streamChat(ep, { model: ep.model, messages, signal, onToken, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
+      log(id, `بيكلّم الموديل (${role}): ${ep.model}…`);
+      const onTok = (t: string) => {
+        const now = Date.now();
+        runtime.set((r) => {
+          const pr = r.progress[id];
+          return pr ? { ...r, progress: { ...r.progress, [id]: { ...pr, lastAt: now, chars: pr.chars + t.length, tail: (pr.tail + t).slice(-160) } } } : r;
+        });
+        onToken?.(t);
+      };
+      return streamChat(ep, { model: ep.model, messages, signal, onToken: onTok, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
     },
   };
 }
 
 function setBusy(id: string, what: string | null) {
-  runtime.set((r) => ({ ...r, busy: { ...r.busy, [id]: what } }));
+  runtime.set((r) => ({ ...r, busy: { ...r.busy, [id]: what }, progress: { ...r.progress, [id]: what ? { startedAt: Date.now(), lastAt: Date.now(), chars: 0, tail: '' } : undefined } }));
 }
 
 export function isBusy(id: string): boolean {
@@ -95,7 +106,11 @@ export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => 
   controllers.set(id, ac);
   setBusy(id, what);
   try {
-    return await job(makeCtx(id, ac.signal));
+    // Race against the abort signal so Stop frees the UI immediately even if something underneath cannot be cancelled.
+    const aborted = new Promise<never>((_, rej) => ac.signal.addEventListener('abort', () => rej(new Aborted()), { once: true }));
+    const work = job(makeCtx(id, ac.signal));
+    work.catch(() => undefined);
+    return await Promise.race([work, aborted]);
   } catch (e) {
     if (e instanceof Aborted || ac.signal.aborted) log(id, 'تم الإلغاء', 'warn');
     else {
@@ -106,6 +121,7 @@ export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => 
   } finally {
     controllers.delete(id);
     setBusy(id, null);
+    runtime.set((r) => ({ ...r, drafts: { ...r.drafts, [id]: {} }, following: { ...r.following, [id]: null } }));
     if (before) recordChange(id, before);
   }
 }

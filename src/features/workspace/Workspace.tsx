@@ -16,7 +16,7 @@ import { basename } from '../../lib/lang';
 import { detectKind } from '../../lib/preview-kind';
 import { diffStats } from '../../lib/diff';
 
-export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: () => void; onOpenSettings: () => void }) {
+export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => void; onOpenSettings: () => void }) {
   const t = useT();
   const project = useApp((s) => s.projects[id]);
   const providers = useApp((s) => s.providers);
@@ -124,15 +124,8 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
       <header className="ws-top" dir="ltr">
         <button className="icon-btn" ref={toggleBtn} aria-label="toggle sidebar" aria-controls="ws-sidebar" aria-expanded={sidebar} onClick={toggleSidebar} data-testid="sidebar-toggle"><Icon name="sidebar" /></button>
         <strong className="ws-title" dir="auto">{project.name}</strong>
-        {(working || review.phase === 'fixing') && (
-          <span className="activity" data-testid="activity" role="status">
-            <Spinner /> <span className="activity-text">{project.status === 'planning' || busy === 'plan' ? 'بيخطط…' : busy === 'publish' ? 'بينشر…' : busy === 'fix' || review.phase === 'fixing' ? 'بيصلح…' : 'بيكتب…'}</span>
-            <button className="btn danger sm" onClick={stopAll} data-testid="stop-btn" aria-label="إيقاف"><Icon name="stop" size={14} /> إيقاف</button>
-          </span>
-        )}
+        {(working || review.phase === 'fixing') && <Activity id={id} label={project.status === 'planning' || busy === 'plan' ? 'بيخطط' : busy === 'publish' ? 'بينشر' : busy === 'fix' || review.phase === 'fixing' ? 'بيصلح' : 'بيكتب'} onStop={stopAll} />}
         <span className="spacer" />
-        <button className="icon-btn" aria-label="الخطة" title="الخطة" onClick={() => setPlanOpen(true)} data-testid="plan-top"><Icon name="list" /></button>
-        <button className="btn sm" onClick={onBack}>{t('projects')}</button>
       </header>
 
       <div className="ws-body">
@@ -198,5 +191,26 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
       {planOpen && <PlanModal project={project} onClose={() => setPlanOpen(false)} onOpenFile={openFile} />}
       {detailsOpen && <DetailsModal project={project} onClose={() => setDetailsOpen(false)} />}
     </div>
+  );
+}
+
+const fmtElapsed = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+/** Live proof of life while a job runs: stage, elapsed time, characters received and the tail of the model's output. */
+function Activity({ id, label, onStop }: { id: string; label: string; onStop: () => void }) {
+  const progress = useRuntime((r) => r.progress[id]);
+  const stage = useRuntime((r) => r.logs[id]?.slice(-1)[0]?.msg ?? '');
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const quiet = progress ? Math.floor((now - progress.lastAt) / 1000) : 0;
+  return (
+    <span className="activity" data-testid="activity" role="status">
+      <Spinner />
+      <span className="activity-text">
+        <b>{label}… {progress ? fmtElapsed(now - progress.startedAt) : ''}</b>
+        <small className="muted" dir="auto">{progress && progress.chars > 0 ? `وصل ${progress.chars} حرف من الموديل${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : quiet >= 20 ? `لسه مستني أول رد من الموديل (${quiet} ث)…` : stage}</small>
+      </span>
+      <button className="btn danger sm" onClick={onStop} data-testid="stop-btn" aria-label="إيقاف"><Icon name="stop" size={14} /> إيقاف</button>
+    </span>
   );
 }

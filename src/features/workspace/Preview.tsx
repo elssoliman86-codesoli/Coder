@@ -139,7 +139,7 @@ const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo; 
       }),
     issues: () => issuesRef.current,
     observe,
-    stopObserve: () => { setRemaining(0); setTotal(0); },
+    stopObserve: () => { setRemaining(0); setTotal(0); const w = waiter.current; if (w) { waiter.current = null; w({ issues: [], bodyText: bodyRef.current }); } },
   }), [observe]);
 
   const sizes = { phone: { w: 390, h: 780 }, tablet: { w: 768, h: 900 }, desktop: { w: 0, h: 0 } };

@@ -30,6 +30,7 @@ export function useReview(projectId: string, preview: RefObject<PreviewHandle | 
       setPhase('fixing');
       setNote('بيفحص المعاينة…');
       let snap: AuditSnapshot = await handle.reload();
+      if (stopped.current) { setNote(''); setPhase('idle'); return; }
       const history: CycleRecord[] = [];
       let critique = userCritique;
       const max = app.get().settings.maxFixCycles;
@@ -41,6 +42,7 @@ export function useReview(projectId: string, preview: RefObject<PreviewHandle | 
         critique = undefined;
         if (stopped.current || !result || !result.fix) break; // cancelled, failed or nothing to fix
         snap = await handle.reload();
+        if (stopped.current) break;
         history.push({ issuesBefore: before, issuesAfter: snap.issues.length });
         const stop = shouldStop(history, max);
         if (stop) { log(projectId, stop === 'max-cycles' ? 'وصلنا للحد الأقصى من دورات الإصلاح' : 'الإصلاحات مش بتقلل المشاكل — وقفت الحلقة وهعرض اللي فاضل', 'warn'); break; }

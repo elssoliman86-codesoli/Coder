@@ -14,6 +14,17 @@ function nativeHttp(): NativeHttp | null {
   return (cap.Plugins?.CapacitorHttp as NativeHttp | undefined) ?? null;
 }
 
+/** Rejects as soon as the signal aborts, even if the underlying operation (e.g. a native HTTP call) cannot be cancelled. */
+export function raceAbort<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const on = () => reject(new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', on, { once: true });
+    p.then((v) => { signal.removeEventListener('abort', on); resolve(v); }, (e) => { signal.removeEventListener('abort', on); reject(e); });
+  });
+}
+
 export const smartFetch: typeof fetch = async (input, init) => {
   try {
     return await fetch(input, init);
@@ -28,7 +39,7 @@ export const smartFetch: typeof fetch = async (input, init) => {
     if (typeof init?.body === 'string') {
       try { data = JSON.parse(init.body); if (data && typeof data === 'object' && 'stream' in (data as object)) (data as Record<string, unknown>).stream = false; } catch { data = init.body; }
     }
-    const r = await http.request({ url, method: init?.method ?? 'GET', headers, data, responseType: 'json', readTimeout: 300_000, connectTimeout: 30_000 });
+    const r = await raceAbort(http.request({ url, method: init?.method ?? 'GET', headers, data, responseType: 'json', readTimeout: 300_000, connectTimeout: 30_000 }), init?.signal ?? undefined);
     const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data ?? null);
     return new Response(body, { status: r.status, headers: { 'content-type': 'application/json' } });
   }

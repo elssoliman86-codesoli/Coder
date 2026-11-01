@@ -1,6 +1,6 @@
 import type { ModelInfo } from '../types';
 import { Aborted, sleep } from '../lib/util';
-import { smartFetch } from './http';
+import { raceAbort, smartFetch } from './http';
 
 export interface Endpoint {
   baseUrl: string;
@@ -184,7 +184,8 @@ const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {}): Promise<string> {
   const f = deps.fetch ?? smartFetch;
-  const wait = deps.sleep ?? sleep;
+  const wait0 = deps.sleep ?? sleep;
+  const wait = (ms: number) => raceAbort(wait0(ms), opts.signal);
   const maxAttempts = 4;
   const flatKey = `${ep.baseUrl}|${opts.model}`;
   let lastErr: unknown;
@@ -200,7 +201,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
     opts.signal?.addEventListener('abort', onAbort);
     try {
       arm();
-      const res = await f(joinUrl(ep.baseUrl, 'chat/completions'), {
+      const res = await raceAbort(f(joinUrl(ep.baseUrl, 'chat/completions'), {
         method: 'POST',
         headers: headers(ep),
         signal: idle.signal,
@@ -211,7 +212,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
           ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
           stream: true,
         }),
-      });
+      }), idle.signal);
       if (!res.ok) {
         const err = new HttpError(res.status, `فشل الطلب (${res.status}): ${await errorText(res)}`);
         if (res.status === 400 && !flatModels.has(flatKey) && NEEDS_FLAT.test(err.message)) {
@@ -239,7 +240,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
       const dec = new TextDecoder();
       const sse = new SSEDecoder();
       for (;;) {
-        const { value, done } = await reader.read();
+        const { value, done } = await raceAbort(reader.read(), idle.signal);
         if (done) break;
         arm();
         const text = sse.feed(dec.decode(value, { stream: true }));

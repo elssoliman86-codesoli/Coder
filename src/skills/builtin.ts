@@ -145,10 +145,10 @@ Report each finding with file, line/area, severity and a concrete fix. Apply the
   ),
   skill(
     'testing',
-    'Tests that prove the behaviour.',
+    'Tests that prove the behaviour. Only when the user asks for tests.',
     ALL,
-    [],
-    true,
+    ['test', 'tests', 'unit test', 'pytest', 'jest', 'vitest', 'اختبار', 'اختبارات', 'تست', 'تيست'],
+    false,
     ['planner', 'coder', 'expert'],
     `
 Every pure function in the inventory gets a unit test (happy path, edge case, error). Use the standard runner of the language (node:test, pytest, go test...). Tests must be runnable with one command documented in the README. No test may depend on the network or the clock without stubbing it.`,
