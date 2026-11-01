@@ -3,9 +3,11 @@ import type { ProjectType, Role, Skill } from '../types';
 export function scoreSkill(skill: Skill, text: string): number {
   const hay = text.toLowerCase();
   let score = 0;
+  const nameParts = new Set(skill.name.toLowerCase().split(/[-_\s]+/).filter((x) => x.length >= 3));
   for (const t of skill.triggers) {
     const needle = t.toLowerCase().trim();
-    if (needle && hay.includes(needle)) score++;
+    // for auto-derived triggers a hit on the skill's own name is a strong signal; generic description words are weak
+    if (needle && hay.includes(needle)) score += skill.autoTriggers && nameParts.has(needle) ? 2 : 1;
   }
   return score;
 }
@@ -16,15 +18,38 @@ export function selectSkills(all: Skill[], description: string, type: ProjectTyp
     if (!s.enabled) return false;
     if (type !== 'any' && !s.appliesTo.includes(type) && !s.appliesTo.includes('*')) return false;
     if (role && s.agents && s.agents.length > 0 && !s.agents.includes(role)) return false;
-    return s.always || scoreSkill(s, description) > 0;
+    return s.always || scoreSkill(s, description) >= (s.autoTriggers ? 2 : 1);
   });
 }
+
+const STOP = new Set('this that with from your when using used use into over than then they them have will should would could about their there which what also only more most such each other any all and for the are was were been being has had not but you can may per via its our out off one two how why who whom'.split(' '));
+
+/** Trigger words for skills that came without any (e.g. from a GitHub SKILL.md): the name parts + distinctive words of the description. */
+export function deriveTriggers(name: string, description: string, max = 14): string[] {
+  const out: string[] = [];
+  const add = (w: string) => { const x = w.toLowerCase(); if (x.length >= 3 && !STOP.has(x) && !out.includes(x)) out.push(x); };
+  name.split(/[-_\s]+/).forEach(add);
+  for (const w of description.split(/[^\p{L}\p{N}+#.]+/u)) { if (w.length >= 4) add(w.replace(/^[.]+|[.]+$/g, '')); if (out.length >= max) break; }
+  return out.slice(0, max);
+}
+
+const MAX_REF_FILE = 4000;
+const MAX_REF_TOTAL = 12_000;
 
 export function skillsPrompt(skills: Skill[]): string {
   if (skills.length === 0) return '';
   return (
     '# Skills you must follow\n' +
-    skills.map((s) => `## ${s.name}\n${s.description}\n${s.body}`).join('\n\n')
+    skills.map((s) => {
+      const extra = s.files?.length ? `\n### Files of this skill\n${s.files.map((f) => `- ${f.path}`).join('\n')}` : '';
+      let budget = MAX_REF_TOTAL;
+      const refs = (s.files ?? []).filter((f) => /\.(md|txt)$/i.test(f.path)).map((f) => {
+        const c = f.content.slice(0, Math.min(MAX_REF_FILE, budget));
+        budget -= c.length;
+        return c ? `\n#### ${f.path}\n${c}` : '';
+      }).join('');
+      return `## ${s.name}\n${s.description}\n${s.body}${extra}${refs}`;
+    }).join('\n\n')
   );
 }
 

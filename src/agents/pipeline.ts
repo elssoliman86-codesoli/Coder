@@ -13,6 +13,8 @@ import type { ObservedIssue } from './observer';
 export interface RunCtx {
   signal: AbortSignal;
   skills: Skill[];
+  /** Called with the names of the skills that were injected into a request (usage tracking). */
+  skillsUsed?(names: string[], role: Role): void;
   live?: boolean;
   getProject(): Project;
   patch(fn: (p: Project) => void): void;
@@ -40,7 +42,9 @@ export function filesContext(files: ProjectFile[], opts: { perFile?: number; tot
 }
 
 function skillBlock(ctx: RunCtx, p: Project | null, role: Role, description: string): string {
-  return skillsPrompt(selectSkills(ctx.skills, description, p ? p.type : 'any', role));
+  const chosen = selectSkills(ctx.skills, description, p ? p.type : 'any', role);
+  if (chosen.length) ctx.skillsUsed?.(chosen.map((s) => s.name), role);
+  return skillsPrompt(chosen);
 }
 
 function planBrief(plan: Plan): string {

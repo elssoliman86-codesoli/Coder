@@ -188,6 +188,48 @@ await step('side menus: open/close by button, scrim, Escape and selection', asyn
   await T('sidebar').waitFor({ state: 'hidden' });
 });
 
+await step('skills: import a GitHub repo as a folder, open its files, see activation check', async () => {
+  const blobs = {
+    k1: '---\nname: pdf-tools\ndescription: Extract text and tables from PDF documents\n---\nUse pdfplumber for tables.',
+    k2: 'Reference: page layout notes', k3: '---\nname: brand-kit\ndescription: Apply brand colours to slides\n---\nUse the palette.',
+  };
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  const handler = async (route) => {
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    const u = new URL(req.url());
+    const json = (o, status = 200) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(o) });
+    if (u.pathname === '/repos/acme/skills') return json({ default_branch: 'main' });
+    if (u.pathname.includes('/git/trees/')) return json({ sha: 'T', truncated: false, tree: [
+      { path: 'skills/pdf/SKILL.md', type: 'blob', sha: 'k1', size: 90 },
+      { path: 'skills/pdf/reference.md', type: 'blob', sha: 'k2', size: 20 },
+      { path: 'skills/brand/SKILL.md', type: 'blob', sha: 'k3', size: 80 },
+    ] });
+    const m = u.pathname.match(/git\/blobs\/(\w+)$/);
+    if (m) return json({ encoding: 'base64', content: Buffer.from(blobs[m[1]]).toString('base64') });
+    return json({ message: 'unexpected' }, 500);
+  };
+  await page.route('https://api.github.com/repos/acme/**', handler);
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await T('hamburger').click();
+  await T('open-settings').click();
+  await page.getByRole('tab', { name: /المهارات|Skills/ }).click();
+  await T('skills-url').fill('https://github.com/acme/skills');
+  await T('skills-import').click();
+  await page.getByText('acme/skills').first().waitFor({ timeout: 10000 });
+  await page.getByText('pdf-tools').first().waitFor();
+  await T('skill-open').filter({ hasText: 'pdf-tools' }).click();
+  await T('skill-file').filter({ hasText: 'reference.md' }).click();
+  const ref = await T('skill-content').inputValue();
+  if (!ref.includes('page layout notes')) throw new Error('skill reference file did not open: ' + ref);
+  await T('skill-match-input').fill('أداة بتقرأ ملفات PDF');
+  await T('skill-match').waitFor();
+  await shot('10-skills');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.unroute('https://api.github.com/repos/acme/**', handler);
+});
+
 await step('GitHub import: repos → Start → file tree; native app gets a visual simulation; publish is branch-based', async () => {
   const files = {
     s1: '<manifest package="com.x.notes"/>', s2: 'package com.x.notes\nimport android.os.Bundle\nclass MainActivity', s3: 'plugins { id "com.android.application" }',

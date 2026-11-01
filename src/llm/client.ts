@@ -19,6 +19,8 @@ export interface ChatOptions {
   maxTokens?: number;
   signal?: AbortSignal;
   onToken?: (chunk: string) => void;
+  /** Reasoning/"thinking" text some models stream before (or while) answering. */
+  onReasoning?: (chunk: string) => void;
   /** Max silence (ms) between stream chunks before giving up. */
   idleTimeoutMs?: number;
 }
@@ -129,14 +131,15 @@ export async function probeModel(ep: Endpoint, model: string, deps: Deps = {}, s
 }
 
 /** Parses one SSE event payload (the text after "data:"). Returns the content delta, or null when finished. */
-export function parseSSEData(data: string): { delta: string; done: boolean } {
+export function parseSSEData(data: string): { delta: string; done: boolean; reasoning?: string } {
   const d = data.trim();
   if (d === '[DONE]') return { delta: '', done: true };
   try {
     const j = JSON.parse(d);
     const choice = j?.choices?.[0];
     const delta: unknown = choice?.delta?.content ?? choice?.text ?? '';
-    return { delta: typeof delta === 'string' ? delta : '', done: false };
+    const rs: unknown = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? '';
+    return { delta: typeof delta === 'string' ? delta : '', done: false, reasoning: typeof rs === 'string' && rs ? rs : undefined };
   } catch {
     return { delta: '', done: false };
   }
@@ -146,7 +149,10 @@ export function parseSSEData(data: string): { delta: string; done: boolean } {
 export class SSEDecoder {
   private buf = '';
   done = false;
+  /** Reasoning text seen by the latest feed() call. */
+  reasoning = '';
   feed(chunk: string): string {
+    this.reasoning = '';
     this.buf += chunk;
     let out = '';
     let idx: number;
@@ -156,6 +162,7 @@ export class SSEDecoder {
       if (!line.startsWith('data:')) continue;
       const r = parseSSEData(line.slice(5));
       if (r.done) this.done = true;
+      if (r.reasoning) this.reasoning += r.reasoning;
       out += r.delta;
     }
     return out;
@@ -239,6 +246,8 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
       if (!res.body || !ctype.includes('text/event-stream')) {
         // Provider ignored stream:true — accept the plain JSON answer.
         const j = await res.json();
+        const rs = j?.choices?.[0]?.message?.reasoning_content ?? j?.choices?.[0]?.message?.reasoning;
+        if (typeof rs === 'string' && rs) opts.onReasoning?.(rs);
         full = j?.choices?.[0]?.message?.content ?? '';
         if (full) opts.onToken?.(full);
         return full;
@@ -251,6 +260,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
         if (done) break;
         arm();
         const text = sse.feed(dec.decode(value, { stream: true }));
+        if (sse.reasoning) opts.onReasoning?.(sse.reasoning);
         if (text) {
           full += text;
           opts.onToken?.(text);

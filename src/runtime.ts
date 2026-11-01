@@ -2,11 +2,12 @@
 import { useSyncExternalStore } from 'react';
 import type { Project, QueueItem } from './types';
 import type { RunCtx } from './agents/pipeline';
-import { app, commitFile, createStore, patchProject } from './storage/store';
+import { app, commitFile, createStore, patchProject, setState } from './storage/store';
 import { BUILTIN_SKILLS } from './skills/builtin';
 import { Aborted, errMsg, uid } from './lib/util';
 import type { Role, Skill } from './types';
 import { explainHttpError, streamChat, type ChatMessage } from './llm/client';
+import { checkSkill } from './skills/check';
 import { applyEdit, continueFile, generateMock, generateProject, planProject } from './agents/pipeline';
 import { stripCodeFence } from './agents/parse';
 
@@ -22,10 +23,12 @@ interface Runtime {
   busy: Record<string, string | null>; // projectId → what is running
   following: Record<string, string | null>; // projectId → file currently being written
   /** Live proof that the model is working: when the job started, how much text arrived, and the tail of it. */
-  progress: Record<string, { startedAt: number; lastAt: number; chars: number; tail: string } | undefined>;
+  progress: Record<string, { startedAt: number; lastAt: number; chars: number; tail: string; think: number } | undefined>;
+  /** Reasoning text of the running job (also persisted into project.thinking). */
+  thinking: Record<string, string>;
 }
 
-export const runtime = createStore<Runtime>({ drafts: {}, logs: {}, busy: {}, following: {}, progress: {} });
+export const runtime = createStore<Runtime>({ drafts: {}, logs: {}, busy: {}, following: {}, progress: {}, thinking: {} });
 const controllers = new Map<string, AbortController>();
 
 export function useRuntime<T>(sel: (r: Runtime) => T): T {
@@ -96,15 +99,23 @@ function trackDraft(id: string, path: string, text: string | null) {
   let m = lastDraft.get(id);
   if (!m) lastDraft.set(id, (m = new Map()));
   m.set(path, text);
+  armPersist(id);
+}
+
+function armPersist(id: string) {
   if (!persistTimers.has(id)) persistTimers.set(id, setTimeout(() => { persistTimers.delete(id); persistRecovery(id); }, 1500));
 }
 
 function persistRecovery(id: string) {
+  if (!app.get().projects[id]) return;
   const m = lastDraft.get(id);
-  if (!m || !app.get().projects[id]) return;
-  const entries = [...m].filter(([, t]) => t.length > 0);
-  if (!entries.length) return;
-  patchProject(id, (p) => { p.recovery = { ...(p.recovery ?? {}), ...Object.fromEntries(entries) }; });
+  const entries = m ? [...m].filter(([, t]) => t.length > 0) : [];
+  const think = runtime.get().thinking[id];
+  if (!entries.length && !think) return;
+  patchProject(id, (p) => {
+    if (entries.length) p.recovery = { ...(p.recovery ?? {}), ...Object.fromEntries(entries) };
+    if (think) p.thinking = think;
+  });
 }
 
 function dropRecovery(id: string, path: string) {
@@ -138,6 +149,7 @@ export async function resumeRecovery(id: string, path: string) {
 }
 
 export function makeCtx(id: string, signal: AbortSignal): RunCtx {
+  const loggedSkills = new Set<string>();
   return {
     signal,
     skills: allSkills(),
@@ -147,6 +159,11 @@ export function makeCtx(id: string, signal: AbortSignal): RunCtx {
     commitFile: (path, content) => { lastDraft.get(id)?.delete(path); commitFile(id, path, content); dropRecovery(id, path); },
     draft: (path, text) => { setDraft(id, path, text); trackDraft(id, path, text); },
     log: (m, k) => log(id, m, k),
+    skillsUsed: (names, role) => {
+      const key = role + ':' + names.join(',');
+      if (!loggedSkills.has(key)) { loggedSkills.add(key); log(id, `مهارات متفعّلة (${role}): ${names.join(', ')}`); }
+      setState((s) => { const st = { ...s.skillStats }; for (const n of names) st[n] = { used: (st[n]?.used ?? 0) + 1, last: Date.now() }; s.skillStats = st; });
+    },
     chat: (role: Role, messages: ChatMessage[], onToken) => {
       const ep = resolveEndpoint(role);
       const st = app.get().settings;
@@ -159,13 +176,22 @@ export function makeCtx(id: string, signal: AbortSignal): RunCtx {
         });
         onToken?.(t);
       };
-      return streamChat(ep, { model: ep.model, messages, signal, onToken: onTok, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
+      const onThink = (t: string) => {
+        const now = Date.now();
+        runtime.set((r) => {
+          const pr = r.progress[id];
+          const th = ((r.thinking[id] ?? '') + t).slice(-30_000);
+          return { ...r, thinking: { ...r.thinking, [id]: th }, progress: pr ? { ...r.progress, [id]: { ...pr, lastAt: now, think: pr.think + t.length } } : r.progress };
+        });
+        armPersist(id);
+      };
+      return streamChat(ep, { model: ep.model, messages, signal, onToken: onTok, onReasoning: onThink, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
     },
   };
 }
 
 function setBusy(id: string, what: string | null) {
-  runtime.set((r) => ({ ...r, busy: { ...r.busy, [id]: what }, progress: { ...r.progress, [id]: what ? { startedAt: Date.now(), lastAt: Date.now(), chars: 0, tail: '' } : undefined } }));
+  runtime.set((r) => ({ ...r, busy: { ...r.busy, [id]: what }, progress: { ...r.progress, [id]: what ? { startedAt: Date.now(), lastAt: Date.now(), chars: 0, tail: '', think: 0 } : undefined }, thinking: what ? { ...r.thinking, [id]: '' } : r.thinking }));
 }
 
 export function isBusy(id: string): boolean {
@@ -173,7 +199,14 @@ export function isBusy(id: string): boolean {
 }
 
 export function cancel(id: string) {
-  controllers.get(id)?.abort();
+  const c = controllers.get(id);
+  if (c) { c.abort(); return; }
+  // Nothing is actually running (e.g. state left over from a killed app): just clear the stuck "working" state.
+  setBusy(id, null);
+  patchProject(id, (p) => {
+    if (p.status === 'planning' || p.status === 'coding') p.status = p.plan ? 'error' : 'new';
+    for (const q of p.queue) if (q.status === 'running') q.status = 'cancelled';
+  });
 }
 
 /** Runs a long job for a project with a shared abort controller, busy flag and error logging. */
@@ -315,4 +348,13 @@ export async function processQueue(id: string, onlyItem?: string) {
 
 export function currentProject(id: string): Project | undefined {
   return app.get().projects[id];
+}
+
+/** Tests a skill with the model assigned to the Expert role (falls back to the others) and stores the verdict. */
+export async function runSkillCheck(skill: Skill, onStep?: (s: string) => void): Promise<void> {
+  const ep = resolveEndpoint('expert');
+  const st = app.get().settings;
+  const chat = (messages: ChatMessage[]) => streamChat(ep, { model: ep.model, messages, temperature: 0.2, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
+  const res = await checkSkill(chat, skill, onStep);
+  setState((s) => { s.skillChecks = { ...s.skillChecks, [skill.name]: res }; });
 }

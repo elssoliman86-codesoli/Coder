@@ -62,7 +62,7 @@ export class GithubClient {
     const res = await this.f(path.startsWith('http') ? path : API + path, {
       method,
       headers: {
-        authorization: `Bearer ${this.token}`,
+        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
         accept: 'application/vnd.github+json',
         'x-github-api-version': '2022-11-28',
         ...(body ? { 'content-type': 'application/json' } : {}),
@@ -95,6 +95,12 @@ export class GithubClient {
       if ((r.data ?? []).length < 100) break;
     }
     return out;
+  }
+
+  /** Default branch of a repository (works for public repos without a token). */
+  async defaultBranch(owner: string, repo: string): Promise<string> {
+    const r = await this.req<any>('GET', `/repos/${owner}/${repo}`);
+    return r.data?.default_branch ?? 'main';
   }
 
   async getTree(owner: string, repo: string, ref: string): Promise<{ sha: string; truncated: boolean; tree: { path: string; type: string; sha: string; size?: number }[] }> {

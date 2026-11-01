@@ -102,6 +102,8 @@ export interface Project {
   baseline?: Record<string, string | null>;
   /** Text that had already arrived from the model when a job was cut off (network drop, stop, crash) — path → partial content. */
   recovery?: Record<string, string>;
+  /** The model's reasoning text from the last job (kept so a cut-off job doesn't lose it). */
+  thinking?: string;
 }
 
 export interface GithubLink {
@@ -153,6 +155,23 @@ export interface Skill {
   body: string;
   /** Agents that receive this skill. Empty/undefined = every agent. */
   agents?: Role[];
+  /** Triggers were derived automatically (not written by a person): require a stronger match before activating. */
+  autoTriggers?: boolean;
+  /** Group shown as a folder in the skills list (e.g. "owner/repo" for imported skills). */
+  folder?: string;
+  /** Other files that live next to SKILL.md (references, scripts, templates). */
+  files?: { path: string; content: string }[];
+  /** Where an imported skill came from. */
+  source?: { repo: string; path: string; ref: string };
+}
+
+export interface SkillCheck {
+  at: number;
+  task: string;
+  criteria: string[];
+  withSkill: { score: number; results: { criterion: string; met: boolean; evidence: string }[] };
+  withoutSkill: { score: number; results: { criterion: string; met: boolean; evidence: string }[] };
+  verdict: 'effective' | 'neutral' | 'weak' | 'ineffective';
 }
 
 export interface GithubState {
@@ -193,6 +212,9 @@ export interface AppState {
   github: GithubState;
   userSkills: Skill[];
   disabledSkills: string[];
+  /** How many times each skill was actually injected into a model request. */
+  skillStats: Record<string, { used: number; last: number }>;
+  skillChecks: Record<string, SkillCheck>;
   settings: Settings;
 }
 
@@ -206,5 +228,7 @@ export const DEFAULT_STATE: AppState = {
   },
   userSkills: [],
   disabledSkills: [],
+  skillStats: {},
+  skillChecks: {},
   settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxOutputTokens: 0, temperature: 0.2, runnerUrl: 'https://emkc.org/api/v2/piston', theme: 'dark' },
 };

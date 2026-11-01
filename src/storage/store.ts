@@ -94,7 +94,8 @@ export async function loadState(): Promise<void> {
       // Anything left "running" when the app closed is not running any more.
       for (const p of Object.values(merged.projects)) {
         for (const q of p.queue) if (q.status === 'running') q.status = 'queued';
-        if (p.status === 'planning') p.status = 'new';
+        if (p.status === 'planning') p.status = p.plan ? 'error' : 'new';
+        if (p.status === 'coding') p.status = 'error'; // the writer died with the app: offer «إعادة المحاولة» (it resumes from the saved text)
       }
       app.set(() => merged);
       await unseal(app.get());

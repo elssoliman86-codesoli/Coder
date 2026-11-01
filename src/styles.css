@@ -227,3 +227,17 @@ textarea.input { resize: vertical; }
 
 .recovery { margin: 8px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: 10px; background: var(--surface); display: grid; gap: 6px; }
 .recovery-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---- skills as folders ---- */
+.skill-folders { display: grid; gap: 8px; }
+.skill-folder { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.skill-folder-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; }
+.skill-folder-head .tree-row { flex: 1; min-width: 0; }
+.skill-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.skill-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.skill-row:last-child { border-bottom: 0; }
+.skill-open { flex: 1; min-width: 0; background: none; border: 0; text-align: start; cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0; }
+.skill-desc { flex-basis: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.skill-files { display: grid; gap: 8px; }
+@media (min-width: 800px) { .skill-files { grid-template-columns: 220px 1fr; } }
+.skill-file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; align-content: start; max-height: 40vh; overflow: auto; }

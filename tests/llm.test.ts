@@ -191,3 +191,10 @@ test('a connection drop mid-stream keeps the text that arrived instead of restar
   assert.equal(calls, 1);
   assert.equal(seen, 'hello world');
 });
+
+import { parseSSEData } from '../src/llm/client.ts';
+test('parseSSEData exposes reasoning text separately from the answer', () => {
+  const r = parseSSEData('{"choices":[{"delta":{"reasoning_content":"thinking…","content":""}}]}');
+  assert.equal(r.reasoning, 'thinking…');
+  assert.equal(r.delta, '');
+});

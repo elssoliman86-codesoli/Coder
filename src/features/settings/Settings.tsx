@@ -4,10 +4,9 @@ import { useT } from '../../i18n';
 import { Field, Icon, Modal, StatusDot, Tabs, toast } from '../../components/ui';
 import { PROVIDER_PRESETS, listModels, probeModel } from '../../llm/client';
 import { GithubClient, REQUIRED_PERMISSIONS } from '../../github/client';
-import { BUILTIN_SKILLS } from '../../skills/builtin';
-import { parseSkillsMd, serializeSkills } from '../../skills/router';
+import { SkillsTab } from './SkillsTab';
 import { errMsg, fmtNum, fmtPrice, pool, uid } from '../../lib/util';
-import { ROLES, type GithubState, type ModelInfo, type Provider, type Role, type Skill } from '../../types';
+import { ROLES, type GithubState, type ModelInfo, type Provider, type Role } from '../../types';
 
 type Tab = 'provider' | 'github' | 'skills' | 'about';
 
@@ -327,98 +326,6 @@ function GithubTab() {
   );
 }
 
-// ---------- skills ----------
-
-function SkillsTab() {
-  const user = useApp((s) => s.userSkills);
-  const disabled = useApp((s) => s.disabledSkills);
-  const [q, setQ] = useState('');
-  const [type, setType] = useState('all');
-  const [edit, setEdit] = useState<Skill | null>(null);
-  const file = useRef<HTMLInputElement>(null);
-  const all: Skill[] = [...BUILTIN_SKILLS.map((s) => ({ ...s, enabled: !disabled.includes(s.name) })), ...user];
-  const rows = all.filter((s) => (type === 'all' || s.appliesTo.includes(type) || s.appliesTo.includes('*')) && (s.name + s.description + s.triggers.join(' ')).toLowerCase().includes(q.toLowerCase()));
-
-  const toggle = (s: Skill) =>
-    setState((st) => {
-      if (s.builtin) st.disabledSkills = s.enabled ? [...st.disabledSkills, s.name] : st.disabledSkills.filter((n) => n !== s.name);
-      else st.userSkills = st.userSkills.map((x) => (x.name === s.name ? { ...x, enabled: !x.enabled } : x));
-    });
-
-  function exportMd() {
-    const blob = new Blob([serializeSkills(all)], { type: 'text/markdown' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'skills.md';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-  async function importMd(f: File) {
-    const skills = parseSkillsMd(await f.text());
-    if (!skills.length) { toast('الملف مفيهوش مهارات بصيغة skills.md', 'error'); return; }
-    setState((st) => {
-      const map = new Map(st.userSkills.map((s) => [s.name, s]));
-      for (const s of skills) if (!BUILTIN_SKILLS.some((b) => b.name === s.name)) map.set(s.name, s);
-      st.userSkills = [...map.values()];
-    });
-    toast(`تم استيراد ${skills.length} مهارة`, 'ok');
-  }
-
-  return (
-    <div className="stack">
-      <div className="filters">
-        <input className="input" placeholder="بحث في المهارات…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="input" value={type} onChange={(e) => setType(e.target.value)} aria-label="applies_to">
-          {['all', 'website', 'webapp', 'backend', 'apk', 'cli', 'exe', 'library'].map((x) => <option key={x} value={x}>{x === 'all' ? 'كل الأنواع' : x}</option>)}
-        </select>
-        <button className="btn" onClick={() => setEdit({ name: '', description: '', appliesTo: ['website'], triggers: [], always: false, enabled: true, builtin: false, body: '' })} data-testid="add-skill"><Icon name="plus" size={16} /> مهارة</button>
-        <button className="btn" onClick={() => file.current?.click()}><Icon name="upload" size={16} /> استيراد skills.md</button>
-        <button className="btn" onClick={exportMd}>تصدير skills.md</button>
-        <input ref={file} type="file" accept=".md,text/markdown" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importMd(f); e.target.value = ''; }} />
-      </div>
-      <ul className="skill-list" data-testid="skill-list">
-        {rows.map((s) => (
-          <li key={s.name} className="skill">
-            <label className="switch"><input type="checkbox" role="switch" checked={s.enabled} onChange={() => toggle(s)} aria-label={s.name} /></label>
-            <div className="skill-main">
-              <strong className="mono" dir="ltr">{s.name}</strong> {s.always && <span className="badge">always</span>} {s.builtin && <span className="badge">built-in</span>}
-              <p className="muted small">{s.description}</p>
-              <p className="muted small" dir="ltr">applies_to: {s.appliesTo.join(', ')}{s.triggers.length ? ` · triggers: ${s.triggers.slice(0, 6).join(', ')}` : ''}</p>
-            </div>
-            <button className="icon-btn" aria-label="view" onClick={() => setEdit(s)}><Icon name={s.builtin ? 'file' : 'edit'} size={16} /></button>
-            {!s.builtin && <button className="icon-btn" aria-label="delete" onClick={() => setState((st) => { st.userSkills = st.userSkills.filter((x) => x.name !== s.name); })}><Icon name="trash" size={16} /></button>}
-          </li>
-        ))}
-      </ul>
-      {edit && <SkillEditor skill={edit} onClose={() => setEdit(null)} />}
-    </div>
-  );
-}
-
-function SkillEditor({ skill, onClose }: { skill: Skill; onClose: () => void }) {
-  const [s, setS] = useState(skill);
-  const ro = skill.builtin;
-  const isNew = !skill.name;
-  const csv = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
-  const valid = /^[a-z0-9-]+$/.test(s.name) && s.body.trim().length > 0;
-  return (
-    <Modal title={ro ? skill.name : isNew ? 'مهارة جديدة' : 'تعديل المهارة'} onClose={onClose} wide footer={ro ? undefined : (
-      <>
-        <button className="btn" onClick={onClose}>إلغاء</button>
-        <button className="btn primary" disabled={!valid} onClick={() => { setState((st) => { st.userSkills = [...st.userSkills.filter((x) => x.name !== skill.name && x.name !== s.name), s]; }); onClose(); }}>حفظ</button>
-      </>
-    )}>
-      <div className="form-grid">
-        <Field label="name" hint="حروف إنجليزية صغيرة وأرقام و -"><input className="input mono" dir="ltr" disabled={ro} value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></Field>
-        <Field label="description"><input className="input" disabled={ro} value={s.description} onChange={(e) => setS({ ...s, description: e.target.value })} /></Field>
-        <Field label="applies_to (website, apk, cli, exe, library)"><input className="input mono" dir="ltr" disabled={ro} value={s.appliesTo.join(', ')} onChange={(e) => setS({ ...s, appliesTo: csv(e.target.value) })} /></Field>
-        <Field label="triggers (كلمات بتفعّل المهارة)"><input className="input" disabled={ro} value={s.triggers.join(', ')} onChange={(e) => setS({ ...s, triggers: csv(e.target.value) })} /></Field>
-      </div>
-      <label className="check"><input type="checkbox" disabled={ro} checked={s.always} onChange={(e) => setS({ ...s, always: e.target.checked })} /> always (تتحقن دايمًا)</label>
-      <Field label="Instructions"><textarea className="input textarea mono" dir="auto" rows={12} disabled={ro} value={s.body} onChange={(e) => setS({ ...s, body: e.target.value })} /></Field>
-    </Modal>
-  );
-}
 
 // ---------- about ----------
 

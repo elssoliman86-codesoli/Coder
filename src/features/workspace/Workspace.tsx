@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, setState, commitFile, acceptChanges } from '../../storage/store';
 import { useT } from '../../i18n';
-import { Icon, Spinner, toast, useEscape, useNarrow } from '../../components/ui';
+import { Icon, Modal, Spinner, toast, useEscape, useNarrow } from '../../components/ui';
 import { errMsg } from '../../lib/util';
 import { acceptRecovery, cancel, discardRecovery, resumeRecovery, startProject, useRuntime } from '../../runtime';
 import { modelOptions } from '../settings/Settings';
@@ -51,6 +51,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
   const [publishOpen, setPublishOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [thinkingOpen, setThinkingOpen] = useState(false);
   const [full, setFull] = useState(false);
   useEscape(() => setFull(false), full);
   const preview = useRef<PreviewHandle>(null);
@@ -124,7 +125,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
       <header className="ws-top" dir="ltr">
         <button className="icon-btn" ref={toggleBtn} aria-label="toggle sidebar" aria-controls="ws-sidebar" aria-expanded={sidebar} onClick={toggleSidebar} data-testid="sidebar-toggle"><Icon name="sidebar" /></button>
         <strong className="ws-title" dir="auto">{project.name}</strong>
-        {(working || review.phase === 'fixing') && <Activity id={id} label={project.status === 'planning' || busy === 'plan' ? 'بيخطط' : busy === 'publish' ? 'بينشر' : busy === 'fix' || review.phase === 'fixing' ? 'بيصلح' : 'بيكتب'} onStop={stopAll} />}
+        {(working || review.phase === 'fixing') && <Activity id={id} label={project.status === 'planning' || busy === 'plan' ? 'بيخطط' : busy === 'publish' ? 'بينشر' : busy === 'fix' || review.phase === 'fixing' ? 'بيصلح' : 'بيكتب'} onStop={stopAll} onThinking={() => setThinkingOpen(true)} />}
         <span className="spacer" />
       </header>
 
@@ -142,6 +143,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
               </select>
             </label>
             <button className={showPreview ? 'btn on block' : 'btn block'} onClick={togglePreview} disabled={!canPreview || (working && !showPreview)} data-testid="preview-btn"><Icon name="play" size={16} /> {t('preview')}</button>
+            {(project.thinking || busy) && <button className="btn block" onClick={() => { closeSidebar(); setThinkingOpen(true); }} data-testid="thinking-side">تفكير الموديل</button>}
             <button className="btn block" onClick={() => { closeSidebar(); setPlanOpen(true); }} data-testid="plan-btn"><Icon name="list" size={16} /> الخطة{project.plan ? ` (${project.plan.files.length})` : ''}</button>
             <section className="card files-card" aria-label={t('filesCard')} data-ui="card">
               <h3 className="card-title">{t('filesCard')} <span className="badge">{files.length}</span></h3>
@@ -202,6 +204,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
 
       <PromptBar project={project} disabled={project.status === 'planning' || project.status === 'coding'} />
       {publishOpen && <PublishModal project={project} onClose={() => setPublishOpen(false)} onOpenSettings={onOpenSettings} />}
+      {thinkingOpen && <ThinkingModal id={id} saved={project.thinking} onClose={() => setThinkingOpen(false)} />}
       {planOpen && <PlanModal project={project} onClose={() => setPlanOpen(false)} onOpenFile={openFile} />}
       {detailsOpen && <DetailsModal project={project} onClose={() => setDetailsOpen(false)} />}
     </div>
@@ -211,7 +214,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
 const fmtElapsed = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /** Live proof of life while a job runs: stage, elapsed time, characters received and the tail of the model's output. */
-function Activity({ id, label, onStop }: { id: string; label: string; onStop: () => void }) {
+function Activity({ id, label, onStop, onThinking }: { id: string; label: string; onStop: () => void; onThinking: () => void }) {
   const progress = useRuntime((r) => r.progress[id]);
   const stage = useRuntime((r) => r.logs[id]?.slice(-1)[0]?.msg ?? '');
   const [now, setNow] = useState(Date.now());
@@ -222,9 +225,22 @@ function Activity({ id, label, onStop }: { id: string; label: string; onStop: ()
       <Spinner />
       <span className="activity-text">
         <b>{label}… {progress ? fmtElapsed(now - progress.startedAt) : ''}</b>
-        <small className="muted" dir="auto">{progress && progress.chars > 0 ? `وصل ${progress.chars} حرف من الموديل${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : quiet >= 20 ? `لسه مستني أول رد من الموديل (${quiet} ث)…` : stage}</small>
+        <small className="muted" dir="auto">{progress && progress.chars > 0 ? `وصل ${progress.chars} حرف من الموديل${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : progress && progress.think > 0 ? `بيفكر… ${progress.think} حرف تفكير${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : quiet >= 20 ? `لسه مستني أول رد من الموديل (${quiet} ث)…` : stage}</small>
       </span>
+      {progress && progress.think > 0 && <button className="btn sm" onClick={onThinking} data-testid="thinking-btn">التفكير</button>}
       <button className="btn danger sm" onClick={onStop} data-testid="stop-btn" aria-label="إيقاف"><Icon name="stop" size={14} /> إيقاف</button>
     </span>
+  );
+}
+
+/** The model's reasoning text: live while a job runs, otherwise the copy saved from the last job. */
+function ThinkingModal({ id, saved, onClose }: { id: string; saved?: string; onClose: () => void }) {
+  const live = useRuntime((r) => r.thinking[id]);
+  const text = live || saved || '';
+  return (
+    <Modal title="تفكير الموديل" onClose={onClose} wide>
+      {text ? <pre className="log mono small" dir="auto" style={{ whiteSpace: 'pre-wrap', maxHeight: '65dvh', overflow: 'auto' }} data-testid="thinking-text">{text}</pre>
+        : <p className="muted">الموديل ده ما بعتش نص تفكير (مش كل الموديلات بتبعته). لو بيفكر هتلاقيه هنا لايف ومحفوظ.</p>}
+    </Modal>
   );
 }
