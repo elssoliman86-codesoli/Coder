@@ -1,6 +1,6 @@
 // Non-persisted runtime state: live drafts, activity log, running jobs.
 import { useSyncExternalStore } from 'react';
-import type { Project, QueueItem } from './types';
+import type { ChangeRecord, Project, QueueItem } from './types';
 import type { RunCtx } from './agents/pipeline';
 import { app, commitFile, createStore, patchProject } from './storage/store';
 import { BUILTIN_SKILLS } from './skills/builtin';
@@ -88,8 +88,9 @@ export function cancel(id: string) {
 }
 
 /** Runs a long job for a project with a shared abort controller, busy flag and error logging. */
-export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => Promise<T>): Promise<T | undefined> {
+export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => Promise<T>, label?: string): Promise<T | undefined> {
   if (isBusy(id)) throw new Error('فيه عملية شغّالة بالفعل على المشروع ده');
+  const before = what === 'edit' || what === 'fix' ? app.get().projects[id]?.files : undefined;
   const ac = new AbortController();
   controllers.set(id, ac);
   setBusy(id, what);
@@ -105,7 +106,29 @@ export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => 
   } finally {
     controllers.delete(id);
     setBusy(id, null);
+    if (before) recordChange(id, what as 'edit' | 'fix', label ?? (what === 'fix' ? 'إصلاح من المراجعة' : 'تعديل'), before);
   }
+}
+
+const MAX_CHANGES = 30;
+const MAX_FILE_CHARS = 200_000;
+
+/** Store before/after of every file the job touched, so the person can see exactly what was fixed. */
+function recordChange(id: string, kind: 'edit' | 'fix', label: string, before: { path: string; content: string }[]) {
+  const p = app.get().projects[id];
+  if (!p) return;
+  const old = new Map(before.map((f) => [f.path, f.content]));
+  const now = new Map(p.files.map((f) => [f.path, f.content]));
+  const files: ChangeRecord['files'] = [];
+  for (const [path, after] of now) {
+    const b = old.get(path);
+    if (b !== after) files.push({ path, before: b === undefined ? null : b.slice(0, MAX_FILE_CHARS), after: after.slice(0, MAX_FILE_CHARS) });
+  }
+  for (const [path, b] of old) if (!now.has(path)) files.push({ path, before: b.slice(0, MAX_FILE_CHARS), after: null });
+  if (!files.length) return;
+  patchProject(id, (pr) => {
+    pr.changes = [...(pr.changes ?? []), { id: uid('c'), at: Date.now(), kind, label: label.slice(0, 160), files }].slice(-MAX_CHANGES);
+  });
 }
 
 export async function startProject(id: string) {
@@ -113,6 +136,15 @@ export async function startProject(id: string) {
     if (!ctx.getProject().plan) await planProject(ctx);
     await generateProject(ctx);
   });
+}
+
+/** Writes a plan for a project that already has files (e.g. a GitHub import) without touching the code. */
+export async function makePlan(id: string) {
+  const prev = app.get().projects[id];
+  if (!prev) return;
+  const keep = { status: prev.status === 'planning' || prev.status === 'coding' ? 'ready' as const : prev.status, type: prev.type, lang: prev.primaryLanguage, style: prev.style };
+  await runJob(id, 'plan', async (ctx) => { await planProject(ctx); });
+  patchProject(id, (p) => { p.status = keep.status === 'error' ? 'ready' : keep.status; p.type = keep.type; p.primaryLanguage = keep.lang; if (keep.style) p.style = keep.style; });
 }
 
 export async function generateMockPreview(id: string) {
@@ -171,7 +203,7 @@ export async function processQueue(id: string, onlyItem?: string) {
         const c = await applyEdit(ctx, next.prompt, (i) => updateQueue(id, next.id, (q) => { q.understanding = i.understanding; q.satisfied = i.satisfied; q.missing = i.missing; }));
         ok = true;
         return c;
-      });
+      }, next.prompt);
       const cancelled = !ok && !app.get().projects[id]?.queue.find((q) => q.id === next.id && q.status !== 'running');
       updateQueue(id, next.id, (q) => {
         q.filesTouched = changed ?? [];

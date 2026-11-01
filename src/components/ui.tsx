@@ -29,8 +29,22 @@ const PATHS: Record<string, string> = {
   copy: 'M8 8h12v12H8V8zM4 4h12v2H6v10H4V4z',
   expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
+  sun: 'M12 16a4 4 0 100-8 4 4 0 000 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M21 13A9 9 0 1111 3a7 7 0 0010 10z',
+  diff: 'M8 3v10M3 8h10M14 19h7M6 20h.01',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
 };
+
+export type ThemeSetting = 'dark' | 'light' | 'system';
+
+/** Resolves the setting to the actual theme and applies it to <html> (+ browser chrome colour). */
+export function applyTheme(setting: ThemeSetting) {
+  let dark = true;
+  try { dark = setting === 'system' ? !window.matchMedia('(prefers-color-scheme: light)').matches : setting !== 'light'; } catch { /* default dark */ }
+  const root = document.documentElement;
+  root.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0f1115' : '#f6f7fa');
+}
 
 export function Icon({ name, size = 20 }: { name: keyof typeof PATHS | string; size?: number }) {
   return (

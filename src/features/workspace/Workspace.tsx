@@ -11,6 +11,7 @@ import { Preview, type PreviewHandle } from './Preview';
 import { PromptBar } from './PromptBar';
 import { PublishModal, DetailsModal } from './Publish';
 import { PlanModal } from './PlanView';
+import { ChangesModal } from './Changes';
 import { ReviewPopover, useReview } from './Review';
 import { basename } from '../../lib/lang';
 import { detectKind } from '../../lib/preview-kind';
@@ -50,6 +51,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   const [publishOpen, setPublishOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
   const [full, setFull] = useState(false);
   useEscape(() => setFull(false), full);
   const preview = useRef<PreviewHandle>(null);
@@ -57,6 +59,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   // The design-review loop only makes sense for previews of the real UI (not terminals, notices or AI simulations).
   const reviewable = kind === 'html' || kind === 'react' || kind === 'next';
   const review = useReview(id, preview);
+  const stopAll = () => { review.stop(); cancel(id); };
 
   const opts = useMemo(() => modelOptions(providers), [providers]);
   const files = project?.files ?? [];
@@ -79,7 +82,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
   useEffect(() => {
     const was = wasBusy.current;
     wasBusy.current = !!busy;
-    if (was && !busy && showPreview && reviewable && project?.status === 'ready' && review.phase !== 'fixing') {
+    if (was && !busy && !review.wasStopped() && showPreview && reviewable && project?.status === 'ready' && review.phase !== 'fixing') {
       setTimeout(() => void review.fixLoop().catch((e) => toast(errMsg(e), 'error')), 0);
     }
   }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -110,8 +113,15 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
       <header className="ws-top" dir="ltr">
         <button className="icon-btn" ref={toggleBtn} aria-label="toggle sidebar" aria-controls="ws-sidebar" aria-expanded={sidebar} onClick={toggleSidebar} data-testid="sidebar-toggle"><Icon name="sidebar" /></button>
         <strong className="ws-title" dir="auto">{project.name}</strong>
-        {working && <span className="activity" data-testid="activity"><Spinner /> {project.status === 'planning' ? 'بيخطط…' : busy === 'publish' ? 'بينشر…' : busy === 'fix' ? 'بيصلح…' : 'بيكتب…'}<button className="icon-btn" aria-label="stop" onClick={() => cancel(id)}><Icon name="stop" size={16} /></button></span>}
+        {(working || review.phase === 'fixing') && (
+          <span className="activity" data-testid="activity" role="status">
+            <Spinner /> <span className="activity-text">{project.status === 'planning' || busy === 'plan' ? 'بيخطط…' : busy === 'publish' ? 'بينشر…' : busy === 'fix' || review.phase === 'fixing' ? 'بيصلح…' : 'بيكتب…'}</span>
+            <button className="btn danger sm" onClick={stopAll} data-testid="stop-btn" aria-label="إيقاف"><Icon name="stop" size={14} /> إيقاف</button>
+          </span>
+        )}
         <span className="spacer" />
+        <button className="icon-btn" aria-label="الخطة" title="الخطة" onClick={() => setPlanOpen(true)} data-testid="plan-top"><Icon name="list" /></button>
+        <button className="icon-btn badge-host" aria-label="التغييرات" title="التغييرات (قبل / بعد)" onClick={() => setChangesOpen(true)} data-testid="changes-btn"><Icon name="diff" />{(project.changes?.length ?? 0) > 0 && <span className="dot-count">{project.changes!.length}</span>}</button>
         <button className="btn sm" onClick={onBack}>{t('projects')}</button>
       </header>
 
@@ -129,6 +139,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
               </select>
             </label>
             <button className={showPreview ? 'btn on block' : 'btn block'} onClick={togglePreview} disabled={!canPreview || (working && !showPreview)} data-testid="preview-btn"><Icon name="play" size={16} /> {t('preview')}</button>
+            <button className="btn block" onClick={() => { closeSidebar(); setChangesOpen(true); }} data-testid="changes-side"><Icon name="diff" size={16} /> التغييرات{project.changes?.length ? ` (${project.changes.length})` : ''}</button>
             <button className="btn block" onClick={() => { closeSidebar(); setPlanOpen(true); }} data-testid="plan-btn"><Icon name="list" size={16} /> الخطة{project.plan ? ` (${project.plan.files.length})` : ''}</button>
             <section className="card files-card" aria-label={t('filesCard')} data-ui="card">
               <h3 className="card-title">{t('filesCard')} <span className="badge">{files.length}</span></h3>
@@ -175,6 +186,7 @@ export function Workspace({ id, onBack, onOpenSettings }: { id: string; onBack: 
 
       <PromptBar project={project} disabled={project.status === 'planning' || project.status === 'coding'} />
       {publishOpen && <PublishModal project={project} onClose={() => setPublishOpen(false)} onOpenSettings={onOpenSettings} />}
+      {changesOpen && <ChangesModal project={project} onClose={() => setChangesOpen(false)} />}
       {planOpen && <PlanModal project={project} onClose={() => setPlanOpen(false)} onOpenFile={openFile} />}
       {detailsOpen && <DetailsModal project={project} onClose={() => setDetailsOpen(false)} />}
     </div>

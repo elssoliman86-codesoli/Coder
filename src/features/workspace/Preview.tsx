@@ -23,6 +23,8 @@ export interface PreviewHandle {
   issues(): ObservedIssue[];
   /** Starts (or restarts) the observation window. */
   observe(seconds: number): void;
+  /** Ends the observation window immediately. */
+  stopObserve?(): void;
 }
 
 interface Props {
@@ -137,6 +139,7 @@ const WebPreview = forwardRef<PreviewHandle & object, Props & { info: KindInfo; 
       }),
     issues: () => issuesRef.current,
     observe,
+    stopObserve: () => { setRemaining(0); setTotal(0); },
   }), [observe]);
 
   const sizes = { phone: { w: 390, h: 780 }, tablet: { w: 768, h: 900 }, desktop: { w: 0, h: 0 } };

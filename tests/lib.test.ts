@@ -98,3 +98,27 @@ test('formatters never invent values', () => {
   assert.equal(fmtPrice(0), 'مجاني');
   assert.equal(fmtPrice(3), '$3.00');
 });
+
+import { diffLines, diffStats } from '../src/lib/diff.ts';
+import { analyzeProject as _ap } from '../src/agents/analysis.ts';
+
+test('diffLines marks added/removed lines with numbers', () => {
+  const d = diffLines('a\nb\nc', 'a\nB\nc\nd', 1);
+  assert.deepEqual(d.filter((l) => l.kind === 'del').map((l) => l.text), ['b']);
+  assert.deepEqual(d.filter((l) => l.kind === 'add').map((l) => l.text), ['B', 'd']);
+  assert.deepEqual(diffStats('a\nb', 'a\nb'), { added: 0, removed: 0 });
+  assert.deepEqual(diffStats('', 'x\ny'), { added: 2, removed: 0 });
+});
+
+test('analyzeProject does not flag public/ or build-output refs', () => {
+  const html = '<link rel="manifest" href="manifest.webmanifest"><link href="/favicon.svg"><script src="assets/app.js"></script><link href="assets/app.css" rel="stylesheet">';
+  const files = [
+    { path: 'index.html', content: html },
+    { path: 'public/manifest.webmanifest', content: '{}' },
+    { path: 'public/favicon.svg', content: '<svg/>' },
+    { path: 'package.json', content: '{"scripts":{"build":"x"}}' },
+  ];
+  assert.equal(_ap(files).filter((f) => f.message.includes('مرجع')).length, 0);
+  const noBuild = _ap([{ path: 'index.html', content: '<script src="missing.js"></script>' }]);
+  assert.equal(noBuild.filter((f) => f.message.includes('مرجع')).length, 1);
+});

@@ -95,6 +95,16 @@ export interface Project {
   github?: GithubLink;
   /** AI-written visual simulation, used to preview apps that cannot run in the browser (native Android, desktop, Flutter…). */
   mock?: { html: string; at: number };
+  /** Recent edits/fixes with the before/after content of every file they changed. */
+  changes?: ChangeRecord[];
+}
+
+export interface ChangeRecord {
+  id: string;
+  at: number;
+  kind: 'edit' | 'fix';
+  label: string;
+  files: { path: string; before: string | null; after: string | null }[];
 }
 
 export interface GithubLink {
@@ -175,6 +185,8 @@ export interface Settings {
   temperature: number;
   /** Piston-compatible endpoint used to run languages that cannot run in the browser (Go, Rust, Java, C++, …). */
   runnerUrl: string;
+  /** Colour theme; 'system' follows the OS. */
+  theme: 'dark' | 'light' | 'system';
 }
 
 export interface AppState {
@@ -197,5 +209,5 @@ export const DEFAULT_STATE: AppState = {
   },
   userSkills: [],
   disabledSkills: [],
-  settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxOutputTokens: 0, temperature: 0.2, runnerUrl: 'https://emkc.org/api/v2/piston' },
+  settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxOutputTokens: 0, temperature: 0.2, runnerUrl: 'https://emkc.org/api/v2/piston', theme: 'dark' },
 };

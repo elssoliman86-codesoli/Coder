@@ -22,6 +22,24 @@ function resolve(from: string, ref: string): string {
   return out.join('/');
 }
 
+const BUILD_DIRS = /^(assets|dist|build|static|_next|out)\//;
+
+/** A package.json with a build script means assets/* may be generated, not missing. */
+function projectHasBuild(files: ProjectFile[]): boolean {
+  const pkg = files.find((f) => f.path === 'package.json');
+  if (!pkg) return false;
+  try { return !!JSON.parse(pkg.content)?.scripts?.build; } catch { return false; }
+}
+
+/** Resolve a reference the way real dev servers/bundlers do: also public/, src/, and generated output. */
+function refExists(paths: Set<string>, target: string, hasBuild: boolean): boolean {
+  for (const base of ['', 'public/', 'src/', 'static/']) {
+    const t = base + target;
+    if (paths.has(t) || paths.has(t + '/index.html')) return true;
+  }
+  return hasBuild && BUILD_DIRS.test(target);
+}
+
 function checkJs(file: string, code: string, out: Finding[]) {
   const looksModule = /^\s*(import\s|export\s)/m.test(code) || /\bimport\s*\(/.test(code);
   try {
@@ -55,6 +73,7 @@ function checkBalance(file: string, code: string, out: Finding[]) {
 export function analyzeProject(files: ProjectFile[]): Finding[] {
   const out: Finding[] = [];
   const paths = new Set(files.map((f) => f.path));
+  const hasBuild = projectHasBuild(files);
   for (const f of files) {
     const lang = languageOf(f.path);
     if (f.content.trim() === '') out.push({ file: f.path, message: 'الملف فاضي', severity: 'medium' });
@@ -71,7 +90,7 @@ export function analyzeProject(files: ProjectFile[]): Finding[] {
         const ref = m[1];
         if (!isLocal(ref)) continue;
         const target = resolve(f.path, ref);
-        if (target && !paths.has(target) && !paths.has(target + '/index.html') && /\.(js|mjs|css|png|jpe?g|svg|json|webmanifest|html)$/i.test(target)) {
+        if (target && !refExists(paths, target, hasBuild) && /\.(js|mjs|css|png|jpe?g|svg|json|webmanifest|html)$/i.test(target)) {
           out.push({ file: f.path, message: `مرجع لملف غير موجود: ${ref}`, severity: 'high' });
         }
       }

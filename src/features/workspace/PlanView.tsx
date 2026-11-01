@@ -1,6 +1,12 @@
 import type { Project } from '../../types';
 import { Icon, Modal, Spinner, toast } from '../../components/ui';
-import { useRuntime } from '../../runtime';
+import { makePlan, useRuntime } from '../../runtime';
+import type { Plan } from '../../types';
+
+/** Plans from older versions / hand-edited storage may lack fields; never let that crash the view. */
+function safePlan(p: Plan): Plan {
+  return { ...p, summary: p.summary ?? '', targetUsers: p.targetUsers ?? '', stack: p.stack ?? [], files: p.files ?? [], functions: p.functions ?? [], screens: (p.screens ?? []).map((s) => ({ ...s, uiTerms: s.uiTerms ?? [] })), design: { ...(p.design ?? {}), style: p.design?.style ?? '', palette: p.design?.palette ?? {}, typography: p.design?.typography ?? '', spacing: p.design?.spacing ?? '', motion: p.design?.motion ?? '' }, tests: p.tests ?? [], risks: p.risks ?? [], assumptions: p.assumptions ?? [], openQuestions: p.openQuestions ?? [] };
+}
 
 export const PLAN_DRAFT_PATH = 'PLAN.json';
 
@@ -9,7 +15,8 @@ const TYPE_LABEL: Record<string, string> = { website: 'موقع ثابت', webap
 /** Readable, clickable view of the plan (live raw JSON while the Planner is still writing it). */
 export function PlanModal({ project, onClose, onOpenFile }: { project: Project; onClose: () => void; onOpenFile: (path: string) => void }) {
   const draft = useRuntime((r) => r.drafts[project.id]?.[PLAN_DRAFT_PATH]);
-  const plan = project.plan;
+  const plan = project.plan ? safePlan(project.plan) : undefined;
+  const busy = useRuntime((r) => r.busy[project.id] ?? null);
   const have = new Set(project.files.map((f) => f.path));
   const copy = () => { void navigator.clipboard?.writeText(project.planMd ?? '').then(() => toast('تم نسخ الخطة', 'ok')); };
 
@@ -21,7 +28,12 @@ export function PlanModal({ project, onClose, onOpenFile }: { project: Project; 
             <p className="muted"><Spinner /> الـ Planner بيكتب الخطة دلوقتي…</p>
             <pre className="log mono small" dir="ltr" style={{ maxHeight: '50dvh' }}>{draft ?? ''}</pre>
           </div>
-        ) : <p className="muted">لسه مفيش خطة. ابدأ المشروع أو اضغط «إعادة المحاولة».</p>}
+        ) : (
+          <div className="stack" data-testid="plan-empty">
+            <p className="muted">{project.files.length ? 'المشروع ده مالوش خطة لسه (مثلًا لأنه مستورد). تقدر تخلي الـ Planner يحلل الملفات الموجودة ويعمل خطة من غير ما يغيّر أي كود.' : 'لسه مفيش خطة. ابدأ المشروع أو اضغط «إعادة المحاولة».'}</p>
+            {project.files.length > 0 && <button className="btn primary" disabled={!!busy} onClick={() => void makePlan(project.id)} data-testid="make-plan"><Icon name="list" size={16} /> تحليل المشروع وعمل خطة</button>}
+          </div>
+        )}
       </Modal>
     );
   }

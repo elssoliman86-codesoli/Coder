@@ -411,6 +411,11 @@ function AboutTab() {
               <option value="ar">العربية (RTL)</option><option value="en">English (LTR)</option>
             </select>
           </Field>
+          <Field label="المظهر">
+            <select className="input" value={settings.theme} data-testid="theme-select" onChange={(e) => setState((s) => { s.settings = { ...s.settings, theme: e.target.value as 'dark' | 'light' | 'system' }; })}>
+              <option value="dark">داكن</option><option value="light">فاتح</option><option value="system">زي الجهاز</option>
+            </select>
+          </Field>
           <Field label="مدة المراقبة قبل قائمة المراجعة (ثواني)">
             <input className="input" type="number" min={5} max={600} value={settings.observeSeconds} data-testid="observe-seconds" onChange={(e) => setState((s) => { s.settings = { ...s.settings, observeSeconds: Math.max(3, Number(e.target.value) || 120) }; })} />
           </Field>

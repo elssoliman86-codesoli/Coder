@@ -118,6 +118,23 @@ await step('edit queue: prompt is applied and can be undone', async () => {
   await shot('06-queue-done');
 });
 
+await step('changes modal shows before/after; theme toggles; top-bar plan button', async () => {
+  await T('changes-btn').click();
+  await T('diff-view').first().waitFor({ timeout: 5000 });
+  const adds = await page.locator('.diff-line.add').count();
+  if (adds < 1) throw new Error('diff shows no added lines');
+  await shot('06b-changes');
+  await page.keyboard.press('Escape');
+  await T('plan-top').click();
+  await T('plan-view').waitFor();
+  await page.keyboard.press('Escape');
+  await T('theme-toggle').click();
+  if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'light') throw new Error('theme did not switch to light');
+  await shot('06c-light');
+  await T('theme-toggle').click();
+  if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'dark') throw new Error('theme did not switch back to dark');
+});
+
 await step('publish: blocked below 10/10 (no GitHub calls made)', async () => {
   await page.getByRole('button', { name: 'Close' }).first().click({ timeout: 1000 }).catch(() => undefined);
   await T('publish-btn').click();

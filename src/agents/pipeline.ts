@@ -258,7 +258,7 @@ export async function analyzeEditRequest(ctx: RunCtx, instruction: string): Prom
 /** Step 3: independent review of the result against the request (+ deterministic syntax checks). */
 async function reviewEdit(ctx: RunCtx, instruction: string, a: EditAnalysis, changed: string[]): Promise<{ satisfied: boolean | null; missing: string[] }> {
   const p = ctx.getProject();
-  const syntax = analyzeProject(p.files).filter((i) => i.severity === 'high' || i.severity === 'critical').map((i) => `[خطأ] ${i.file}: ${i.message}`);
+  const syntax = analyzeProject(p.files).filter((i) => (i.severity === 'high' || i.severity === 'critical') && changed.some((c) => i.file === c || i.file.startsWith(c + ' '))).map((i) => `[خطأ] ${i.file}: ${i.message}`);
   let satisfied: boolean | null = null;
   let missing: string[] = [];
   try {
