@@ -23,6 +23,8 @@ export interface ChatOptions {
   onReasoning?: (chunk: string) => void;
   /** Max silence (ms) between stream chunks before giving up. */
   idleTimeoutMs?: number;
+  /** Hard cap on the whole request (ms), even if tokens keep arriving. */
+  maxTotalMs?: number;
 }
 
 export interface Deps {
@@ -32,8 +34,8 @@ export interface Deps {
 
 /** The connection dropped after text had already arrived. `partial` is everything received so far. */
 export class StreamInterrupted extends Error {
-  constructor(public partial: string, public cause?: unknown) {
-    super(`الاتصال فصل بعد ما وصل ${partial.length} حرف`);
+  constructor(public partial: string, public cause?: unknown, public capped = false) {
+    super(capped ? `الطلب وصل للحد الأقصى للوقت بعد ${partial.length} حرف` : `الاتصال فصل بعد ما وصل ${partial.length} حرف`);
   }
 }
 
@@ -212,6 +214,8 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
       clearTimeout(timer);
       timer = setTimeout(() => idle.abort(), opts.idleTimeoutMs ?? 180_000);
     };
+    let capped = false;
+    const cap = opts.maxTotalMs ? setTimeout(() => { capped = true; idle.abort(); }, opts.maxTotalMs) : undefined;
     const onAbort = () => idle.abort();
     opts.signal?.addEventListener('abort', onAbort);
     try {
@@ -272,7 +276,8 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
       if (opts.signal?.aborted) throw new Aborted();
       if (e instanceof HttpError) throw e;
       // Text already arrived: restarting would duplicate it. Hand the partial text to the caller, who keeps it and can resume.
-      if (full.length > 0) throw new StreamInterrupted(full, e);
+      if (full.length > 0) throw new StreamInterrupted(full, e, capped);
+      if (capped) { lastErr = new Error(`الموديل خد أكتر من ${Math.round((opts.maxTotalMs ?? 0) / 60000)} دقيقة في طلب واحد فاتوقف. جرّب موديل أسرع لدور ده (الإعدادات ← الأدوار)، أو زوّد الحد في إعدادات الاتصال.`); throw lastErr; }
       lastErr = idle.signal.aborted ? new Error('انتهت مهلة الاستجابة (لا بيانات من الموديل)') : e;
       if (attempt < maxAttempts - 1) {
         await wait(800 * 2 ** attempt);
@@ -280,6 +285,7 @@ export async function streamChat(ep: Endpoint, opts: ChatOptions, deps: Deps = {
       }
     } finally {
       clearTimeout(timer);
+      clearTimeout(cap);
       opts.signal?.removeEventListener('abort', onAbort);
     }
   }
@@ -304,6 +310,7 @@ export const PROVIDER_PRESETS: { id: string; label: string; baseUrl: string }[] 
 
 /** Turns a provider HTTP error into an actionable Arabic message that names the model. */
 export function explainHttpError(e: unknown, model: string): Error {
+  if (e instanceof StreamInterrupted && e.capped) return new Error(`الموديل "${model}" خد وقت أطول من الحد (وصل ${e.partial.length} حرف) فاتوقف. اللي وصل اتحفظ — اضغط «كمّل»، أو جرّب موديل أسرع للدور ده، أو زوّد الحد في إعدادات الاتصال.`);
   if (e instanceof StreamInterrupted) return new Error(`الاتصال فصل بعد ما وصل ${e.partial.length} حرف من ${'"'}${model}${'"'}. الكود اللي وصل اتحفظ — اضغط «كمّل» لما النت يرجع.`);
   if (!(e instanceof HttpError)) return e instanceof Error ? e : new Error(String(e));
   const m = `الموديل "${model}"`;

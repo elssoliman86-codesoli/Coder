@@ -70,6 +70,9 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
     }
     return out;
   }, [project?.baseline, project?.files]);
+  // The automatic look-and-fix loop costs model calls: skip it for imported/large projects (the person can start it by hand).
+  const totalChars = useMemo(() => (project?.files ?? []).reduce((n, f) => n + f.content.length, 0), [project?.files]);
+  const autoReview = !project?.importedFrom && !project?.github && totalChars < 1_500_000;
   const review = useReview(id, preview);
   const stopAll = () => { review.stop(); cancel(id); };
 
@@ -94,7 +97,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
   useEffect(() => {
     const was = wasBusy.current;
     wasBusy.current = !!busy;
-    if (was && !busy && !review.wasStopped() && showPreview && reviewable && project?.status === 'ready' && review.phase !== 'fixing') {
+    if (was && !busy && !review.wasStopped() && showPreview && reviewable && autoReview && project?.status === 'ready' && review.phase !== 'fixing') {
       setTimeout(() => void review.fixLoop().catch((e) => toast(errMsg(e), 'error')), 0);
     }
   }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -116,7 +119,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
     closeSidebar();
     if (showPreview) { setShowPreview(false); return; }
     setShowPreview(true);
-    if (!reviewable) return;
+    if (!reviewable || !autoReview) return;
     setTimeout(() => void review.fixLoop().catch((e) => toast(errMsg(e), 'error')), 50);
   };
 
@@ -173,6 +176,12 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
           {showPreview && (
             <div className={full ? 'ws-preview full' : 'ws-preview'} data-testid="ws-preview">
               <Preview ref={preview} project={project} full={full} onToggleFull={() => setFull(!full)} onClose={() => { setShowPreview(false); setFull(false); }} onWindowEnd={() => review.onWindowEnd()} disabled={review.phase === 'fixing'} />
+              {reviewable && !autoReview && review.phase === 'idle' && (
+                <div className="review-note" data-testid="manual-review">
+                  المراجعة التلقائية مقفولة للمشروع ده (مستورد أو كبير) عشان ما تستهلكش الموديل.
+                  <button className="btn sm primary" onClick={() => void review.fixLoop().catch((e) => toast(errMsg(e), 'error'))} data-testid="manual-review-btn">افحص وأصلح</button>
+                </div>
+              )}
               {review.note && <div className="review-note" role="status" data-testid="review-note"><Spinner /> {review.note}</div>}
               <ReviewPopover project={project} phase={review.phase} issues={preview.current?.issues().length ?? 0}
                 onContinue={review.keepWatching} onAnother={review.anotherEdit} onDone={review.done}
@@ -220,12 +229,15 @@ function Activity({ id, label, onStop, onThinking }: { id: string; label: string
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const quiet = progress ? Math.floor((now - progress.lastAt) / 1000) : 0;
+  const elapsed = progress ? (now - progress.startedAt) / 1000 : 0;
+  const rate = progress ? (progress.chars + progress.think) / Math.max(1, elapsed) : 0;
+  const slow = !!progress && elapsed > 120 && rate < 15 && quiet < 20;
   return (
     <span className="activity" data-testid="activity" role="status">
       <Spinner />
       <span className="activity-text">
         <b>{label}… {progress ? fmtElapsed(now - progress.startedAt) : ''}</b>
-        <small className="muted" dir="auto">{progress && progress.chars > 0 ? `وصل ${progress.chars} حرف من الموديل${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : progress && progress.think > 0 ? `بيفكر… ${progress.think} حرف تفكير${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : quiet >= 20 ? `لسه مستني أول رد من الموديل (${quiet} ث)…` : stage}</small>
+        <small className="muted" dir="auto">{slow ? `بطيء: ${rate.toFixed(0)} حرف/ث — جرّب موديل أسرع لدور ده` : progress && progress.chars > 0 ? `وصل ${progress.chars} حرف من الموديل${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : progress && progress.think > 0 ? `بيفكر… ${progress.think} حرف تفكير${quiet >= 20 ? ` — ساكت من ${quiet} ث` : ' ✓ شغّال'}` : quiet >= 20 ? `لسه مستني أول رد من الموديل (${quiet} ث)…` : stage}</small>
       </span>
       {progress && progress.think > 0 && <button className="btn sm" onClick={onThinking} data-testid="thinking-btn">التفكير</button>}
       <button className="btn danger sm" onClick={onStop} data-testid="stop-btn" aria-label="إيقاف"><Icon name="stop" size={14} /> إيقاف</button>

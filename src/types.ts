@@ -196,6 +196,8 @@ export interface Settings {
   concurrency: number;
   /** Seconds of silence from the model before a request is given up (reasoning models can be slow). */
   requestTimeoutSec: number;
+  /** Hard cap (minutes) on one model request, even while it keeps streaming. 0 = no cap. */
+  maxRequestMinutes: number;
   /** 0 = let the provider decide. */
   maxOutputTokens: number;
   temperature: number;
@@ -230,5 +232,5 @@ export const DEFAULT_STATE: AppState = {
   disabledSkills: [],
   skillStats: {},
   skillChecks: {},
-  settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxOutputTokens: 0, temperature: 0.2, runnerUrl: 'https://emkc.org/api/v2/piston', theme: 'dark' },
+  settings: { language: 'ar', observeSeconds: 120, maxFixCycles: 5, concurrency: 3, requestTimeoutSec: 180, maxRequestMinutes: 8, maxOutputTokens: 0, temperature: 0.2, runnerUrl: 'https://emkc.org/api/v2/piston', theme: 'dark' },
 };

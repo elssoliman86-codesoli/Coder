@@ -108,16 +108,21 @@ export async function loadState(): Promise<void> {
 }
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+let lastSaveMs = 0;
 export function startPersisting() {
   app.subscribe(() => {
     clearTimeout(timer);
+    // The whole state is written each time; for a big project that is slow, so back off proportionally
+    // instead of re-serialising tens of MB several times a second (this froze the app on large imports).
     timer = setTimeout(async () => {
+      const t0 = Date.now();
       try {
         await kvSet('state', await seal(app.get()));
       } catch (e) {
         console.warn('تعذر حفظ البيانات', e);
       }
-    }, 400);
+      lastSaveMs = Date.now() - t0;
+    }, Math.min(15_000, Math.max(400, lastSaveMs * 5)));
   });
 }
 

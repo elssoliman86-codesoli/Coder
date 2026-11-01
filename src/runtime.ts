@@ -185,7 +185,7 @@ export function makeCtx(id: string, signal: AbortSignal): RunCtx {
         });
         armPersist(id);
       };
-      return streamChat(ep, { model: ep.model, messages, signal, onToken: onTok, onReasoning: onThink, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000 }).catch((e) => { throw explainHttpError(e, ep.model); });
+      return streamChat(ep, { model: ep.model, messages, signal, onToken: onTok, onReasoning: onThink, temperature: role === 'planner' ? Math.min(1, st.temperature + 0.1) : st.temperature, maxTokens: st.maxOutputTokens || undefined, idleTimeoutMs: Math.max(20, st.requestTimeoutSec) * 1000, maxTotalMs: st.maxRequestMinutes > 0 ? st.maxRequestMinutes * 60_000 : undefined }).catch((e) => { throw explainHttpError(e, ep.model); });
     },
   };
 }

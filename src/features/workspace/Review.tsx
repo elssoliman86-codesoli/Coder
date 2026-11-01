@@ -38,12 +38,14 @@ export function useReview(projectId: string, preview: RefObject<PreviewHandle | 
         if (snap.issues.length === 0 && !critique) break;
         setNote(`دورة إصلاح ${history.length + 1} — ${snap.issues.length} ملاحظة`);
         const before = snap.issues.length;
+        const cycleStart = Date.now();
         const result = await runJob(projectId, 'fix', (ctx) => runFixCycle(ctx, { observed: snap.issues, bodyText: snap.bodyText, userCritique: critique }));
         critique = undefined;
         if (stopped.current || !result || !result.fix) break; // cancelled, failed or nothing to fix
         snap = await handle.reload();
         if (stopped.current) break;
         history.push({ issuesBefore: before, issuesAfter: snap.issues.length });
+        if (Date.now() - cycleStart > 240_000) { log(projectId, 'الموديل بطيء (دورة الإصلاح خدت أكتر من 4 دقايق) — وقفت الحلقة. غيّر موديل الـ Fixer لو عايز تكمل.', 'warn'); break; }
         const stop = shouldStop(history, max);
         if (stop) { log(projectId, stop === 'max-cycles' ? 'وصلنا للحد الأقصى من دورات الإصلاح' : 'الإصلاحات مش بتقلل المشاكل — وقفت الحلقة وهعرض اللي فاضل', 'warn'); break; }
       }

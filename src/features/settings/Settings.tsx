@@ -363,6 +363,9 @@ function AboutTab() {
           <Field label="مهلة عدم الاستجابة (ثواني)" hint="لو الموديل ما رجّعش أي بيانات المدة دي، الطلب بيتعاد تلقائيًا.">
             <input className="input" type="number" min={20} max={900} value={settings.requestTimeoutSec} data-testid="request-timeout" onChange={(e) => setState((s) => { s.settings = { ...s.settings, requestTimeoutSec: Math.min(900, Math.max(20, Number(e.target.value) || 180)) }; })} />
           </Field>
+          <Field label="أقصى وقت للطلب الواحد (دقايق، 0 = بلا حد)" hint="حتى لو الموديل لسه بيكتب. بيحمي من موديلات بطيئة جدًا؛ اللي وصل بيتحفظ وتقدر تكمّل.">
+            <input className="input" type="number" min={0} max={60} value={settings.maxRequestMinutes} data-testid="max-request-min" onChange={(e) => setState((s) => { s.settings = { ...s.settings, maxRequestMinutes: Math.min(60, Math.max(0, Number(e.target.value) || 0)) }; })} />
+          </Field>
           <Field label="أقصى عدد توكنز للرد (0 = تلقائي)">
             <input className="input" type="number" min={0} max={200000} value={settings.maxOutputTokens} data-testid="max-tokens" onChange={(e) => setState((s) => { s.settings = { ...s.settings, maxOutputTokens: Math.max(0, Number(e.target.value) || 0) }; })} />
           </Field>

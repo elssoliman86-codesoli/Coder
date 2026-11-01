@@ -198,3 +198,20 @@ test('parseSSEData exposes reasoning text separately from the answer', () => {
   assert.equal(r.reasoning, 'thinking…');
   assert.equal(r.delta, '');
 });
+
+test('maxTotalMs caps a request that keeps streaming and keeps the partial text', async () => {
+  const enc = new TextEncoder();
+  const f = (async (_u: unknown, init?: RequestInit) => {
+    const body = new ReadableStream({
+      start(c) {
+        const t = setInterval(() => { try { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"x"}}]}\n\n')); } catch { clearInterval(t); } }, 5);
+        init?.signal?.addEventListener('abort', () => { clearInterval(t); try { c.error(new DOMException('Aborted', 'AbortError')); } catch { /* closed */ } });
+      },
+    });
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    _stream({ baseUrl: 'http://x/v1', apiKey: 'k' }, { model: 'm', messages: [], maxTotalMs: 80 }, { fetch: f, sleep: async () => {} }),
+    (e: unknown) => e instanceof StreamInterrupted && e.capped && e.partial.length > 0,
+  );
+});
