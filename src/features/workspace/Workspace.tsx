@@ -154,7 +154,7 @@ export function Workspace({ id, onOpenSettings }: { id: string; onBack: () => vo
             </section>
             <button className="btn primary block" onClick={() => { closeSidebar(); setPublishOpen(true); }} disabled={!files.length || working} data-testid="publish-btn"><Icon name="github" size={16} /> {t('publish')}</button>
             {project.publish && <button className="btn block" onClick={() => { closeSidebar(); setDetailsOpen(true); }} data-testid="details-btn">{t('details')}</button>}
-            {project.status === 'error' && <button className="btn block" onClick={() => void startProject(id)}>إعادة المحاولة</button>}
+            {project.status === 'error' && <div className="stack"><p className="muted small">تقدر تستكمل من آخر ملف؛ الملفات المكتملة هتتخطى ومش هتتكتب من جديد.</p><button className="btn primary block" onClick={() => void startProject(id)} data-testid="resume-project"><Icon name="play" size={15} /> استكمال إنشاء المشروع</button></div>}
           </aside>
         )}
 
