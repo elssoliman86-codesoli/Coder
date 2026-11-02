@@ -46,6 +46,10 @@ h1 { font-size: 1.5rem; } h2 { font-size: 1.15rem; } h3 { font-size: 1rem; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; text-align: start; color: inherit; }
 .project-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; width: 100%; }
 .project-card:hover { border-color: var(--accent); }
+.project-card-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.project-card-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.project-card-actions .btn { min-height: 34px; }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
 .card-body { min-width: 0; flex: 1; } .card-title { overflow-wrap: anywhere; margin-bottom: 4px; }
 .card-meta { margin: 0; color: var(--muted); font-size: .88rem; }
 .card-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
