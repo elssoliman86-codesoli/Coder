@@ -29,6 +29,8 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+          # Every CI build gets a strictly increasing Android versionCode.
+          sed -i -E "s/versionCode[[:space:]]+[0-9]+/versionCode ${GITHUB_RUN_NUMBER}/" android/app/build.gradle
       - name: Restore stable Android debug signing key
         uses: actions/cache@v4
         with:
