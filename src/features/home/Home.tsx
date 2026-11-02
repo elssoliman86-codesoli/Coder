@@ -14,13 +14,22 @@ function ProjectCard({ p, onOpen }: { p: Project; onOpen: () => void }) {
   async function downloadProject(e: MouseEvent) {
     e.stopPropagation();
     try {
+      if (!p.files.length) {
+        window.alert('المشروع لسه مفيهوش ملفات مكتملة للتنزيل. استكمل التوليد أولًا.');
+        return;
+      }
       const blob = await exportZip(p.files);
+      if (!blob.size) throw new Error('ملف ZIP الناتج فارغ');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `${p.name.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}.zip`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
       a.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      a.remove();
+      // Android WebView may start consuming the blob URL after the click returns.
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تنزيل المشروع'); }
   }
   function removeProject(e: React.MouseEvent) {
