@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { deleteProject } from '../../storage/store';
 import { exportZip } from '../../lib/zip';
 import { useApp } from '../../storage/store';
@@ -11,7 +11,7 @@ import { NewProjectDialog } from './NewProject';
 const TYPE_LABEL: Record<string, string> = { website: 'Website', webapp: 'Web app', backend: 'Backend', apk: 'APK', cli: 'CLI', exe: 'EXE', library: 'Library' };
 
 function ProjectCard({ p, onOpen }: { p: Project; onOpen: () => void }) {
-  async function downloadProject(e: React.MouseEvent) {
+  async function downloadProject(e: MouseEvent) {
     e.stopPropagation();
     try {
       const blob = await exportZip(p.files);
@@ -20,7 +20,7 @@ function ProjectCard({ p, onOpen }: { p: Project; onOpen: () => void }) {
       a.href = url;
       a.download = `${p.name.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}.zip`;
       a.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
     } catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تنزيل المشروع'); }
   }
   function removeProject(e: React.MouseEvent) {
