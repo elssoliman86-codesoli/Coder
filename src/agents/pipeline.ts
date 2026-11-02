@@ -153,36 +153,39 @@ export async function generateProject(ctx: RunCtx): Promise<void> {
   const plan = p.plan;
   const vocab = await uiVocabulary(p.description, { live: false, style: plan.design.style });
   const system = [CODER_SYSTEM, skillBlock(ctx, p, 'coder', p.description), vocab.text].filter(Boolean).join('\n\n');
-  const total = plan.files.length;
-  let done = 0;
-  for (const f of plan.files) {
-    throwIfAborted(ctx.signal);
-    p = ctx.getProject();
+  const pending = plan.files.filter((f) => {
     const existing = p.files.find((x) => x.path === f.path);
-    done++;
-    if (existing && existing.content.trim()) {
-      ctx.log(`(${done}/${total}) ${f.path} موجود — تم التخطي`);
-      continue;
-    }
-    ctx.log(`(${done}/${total}) الـ Coder بيكتب ${f.path}`);
+    return !(existing && existing.content.trim());
+  });
+  const total = plan.files.length;
+  let done = total - pending.length;
+  if (done) ctx.log(`استكمال: ${done} ملف مكتمل من ${total} — هيتخطوا`, 'ok');
+
+  // Independent files are separate model requests. Keep concurrency deliberately small
+  // to avoid provider rate limits and reduce memory pressure on mobile devices.
+  let cursor = 0;
+  let failure: unknown;
+  const writeOne = async (f: Plan['files'][number]) => {
+    throwIfAborted(ctx.signal);
+    const current = ctx.getProject();
     const fns = plan.functions.filter((x) => x.file === f.path);
-    const written = p.files.filter((x) => x.path !== f.path);
+    const written = current.files.filter((x) => x.path !== f.path);
     const user = [
-      `Project: ${p.name}`,
-      `Original description:\n${p.description}`,
+      `Project: ${current.name}`,
+      `Original description:\n${current.description}`,
       `Plan:\n${planBrief(plan)}`,
       fns.length ? `Functions required in ${f.path}:\n${fns.map((x) => `- ${x.signature || x.name}: ${x.description}`).join('\n')}` : '',
-      written.length ? `Files already written (keep consistent with them):\n${filesContext(written, { perFile: 5000, total: 40_000 })}` : '',
+      written.length ? `Existing files for reference (other files may still be generated in parallel):\n${filesContext(written, { perFile: 2500, total: 16_000 })}` : '',
       `Write the complete content of \`${f.path}\` now (${f.purpose}). Output only the raw file content.`,
     ].filter(Boolean).join('\n\n');
+    ctx.log(`(${++done}/${total}) الـ Coder بيكتب ${f.path}`);
+    const saved = current.recovery?.[f.path];
     let acc = '';
-    const saved = ctx.getProject().recovery?.[f.path];
     if (saved && saved.length > 0) {
-      ctx.log(`${f.path}: لقيت ${saved.length} حرف محفوظين من المرة اللي فاتت — هكمّل منهم`);
+      ctx.log(`${f.path}: لقيت ${saved.length} حرف محفوظين — هكمّل منهم`);
       acc = await continueFile(ctx, f.path, saved);
     } else {
       ctx.draft(f.path, '');
-      // Fresh text per request: a retried request restarts from zero, so never append to an earlier attempt.
       acc = await ctx.chat('coder', [{ role: 'system', content: system }, { role: 'user', content: user }], (t) => {
         acc += t;
         ctx.draft(f.path, acc);
@@ -191,7 +194,21 @@ export async function generateProject(ctx: RunCtx): Promise<void> {
     const content = stripCodeFence(acc).replace(/\s+$/, '') + '\n';
     ctx.commitFile(f.path, content);
     ctx.draft(f.path, null);
-  }
+    ctx.log(`اكتمل ${f.path}`, 'ok');
+  };
+
+  const worker = async () => {
+    while (!failure && !ctx.signal.aborted) {
+      const index = cursor++;
+      if (index >= pending.length) return;
+      try { await writeOne(pending[index]); }
+      catch (e) { failure = e; return; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, pending.length) }, () => worker()));
+  if (failure) throw failure;
+  throwIfAborted(ctx.signal);
+
   p = ctx.getProject();
   const extra: ProjectFile[] = [];
   if (p.planMd) extra.push({ path: 'PLAN.md', content: p.planMd });
