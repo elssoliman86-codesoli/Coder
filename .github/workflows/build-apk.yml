@@ -29,10 +29,17 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
-      - name: Install stable Android debug signing key
+      - name: Restore stable Android debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: onebyte-android-debug-keystore-v1
+      - name: Create stable Android debug signing key if missing
         run: |
           mkdir -p "$HOME/.android"
-          cp android-debug.keystore "$HOME/.android/debug.keystore"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, OU=Development, O=2OneByte, L=Cairo, ST=Cairo, C=EG"
+          fi
           chmod 600 "$HOME/.android/debug.keystore"
       - name: Build debug APK
         working-directory: android
