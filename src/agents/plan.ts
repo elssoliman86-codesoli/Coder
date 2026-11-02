@@ -2,7 +2,8 @@ import type { Plan, ProjectType } from '../types';
 import { safeRelPath } from './parse';
 
 const TYPES: ProjectType[] = ['website', 'webapp', 'backend', 'apk', 'cli', 'exe', 'library'];
-const MAX_FILES = 40;
+// Keep in sync with ZIP/GitHub import capacity. Large plans may still need to be split by the model's output budget.
+const MAX_FILES = 5000;
 
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : v == null ? d : String(v));
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
