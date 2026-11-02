@@ -29,6 +29,11 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+      - name: Install stable Android debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          cp android-debug.keystore "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
       - name: Build debug APK
         working-directory: android
         run: |
