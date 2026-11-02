@@ -5,5 +5,6 @@ const config: CapacitorConfig = {
   appName: '2OneByte-Coder',
   webDir: 'dist',
   android: { allowMixedContent: false },
+  plugins: { CapacitorHttp: { enabled: true } },
 };
 export default config;
