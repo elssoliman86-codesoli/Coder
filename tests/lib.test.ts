@@ -40,8 +40,8 @@ test('importZip never yields a path that escapes the project (JSZip also normali
 
 test('importZip blocks zip bombs (total size limit)', async () => {
   const z = new JSZip();
-  const big = 'a'.repeat(1.9 * 1024 * 1024);
-  for (let i = 0; i < 25; i++) z.file(`f${i}.txt`, big);
+  const big = 'a'.repeat(4.1 * 1024 * 1024);
+  for (let i = 0; i < 21; i++) z.file(`f${i}.txt`, big);
   await assert.rejects(importZip(await z.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })), /zip bomb/);
 });
 
