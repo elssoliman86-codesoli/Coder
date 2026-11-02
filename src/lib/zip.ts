@@ -2,9 +2,9 @@ import JSZip from 'jszip';
 import type { ProjectFile } from '../types';
 
 export const LIMITS = {
-  maxEntries: 3000,
-  maxFileBytes: 2 * 1024 * 1024,
-  maxTotalBytes: 40 * 1024 * 1024,
+  maxEntries: 5000,
+  maxFileBytes: 8 * 1024 * 1024,
+  maxTotalBytes: 80 * 1024 * 1024,
 };
 
 const BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|bmp|pdf|zip|gz|tar|7z|rar|jar|apk|aab|exe|dll|so|dylib|class|woff2?|ttf|otf|eot|mp3|mp4|mov|avi|wasm|keystore|jks|db|sqlite)$/i;
