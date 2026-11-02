@@ -223,8 +223,13 @@ export async function runJob<T>(id: string, what: string, job: (ctx: RunCtx) => 
     work.catch(() => undefined);
     return await Promise.race([work, aborted]);
   } catch (e) {
-    if (e instanceof Aborted || ac.signal.aborted) log(id, 'تم الإلغاء', 'warn');
-    else {
+    if (e instanceof Aborted || ac.signal.aborted) {
+      log(id, 'تم الإلغاء — الملفات المكتملة محفوظة، وأي جزء وصل من الملف الحالي محفوظ للاستكمال', 'warn');
+      patchProject(id, (p) => {
+        if (p.status === 'planning' || p.status === 'coding') p.status = p.plan ? 'error' : 'new';
+        for (const q of p.queue) if (q.status === 'running') q.status = 'cancelled';
+      });
+    } else {
       log(id, errMsg(e), 'error');
       patchProject(id, (p) => { if (p.status === 'planning' || p.status === 'coding') p.status = 'error'; });
     }
